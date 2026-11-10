@@ -142,6 +142,32 @@ def test_fetch_star_history_parses_starred_at():
     ]
 
 
+def test_fetch_star_history_targets_last_pages_for_big_repos():
+    """stargazers는 오래된 순 정렬 — Link rel=last 로 최신 페이지를 가져와야 한다."""
+    seen_pages = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        page = int(request.url.params["page"])
+        seen_pages.append(page)
+        if page == 1:
+            # 대형 리포: 총 5페이지가 있다고 알려줌
+            return httpx.Response(200, json=[
+                {"starred_at": "2020-01-01T00:00:00Z", "user": {"login": "old"}}
+            ], headers={"Link": '<https://api.github.com/repos/owner/repo/stargazers?per_page=100&page=5>; rel="last"'})
+        # 마지막 페이지들 = 최근 스타
+        return httpx.Response(200, json=[
+            {"starred_at": "2026-11-09T00:00:00Z", "user": {"login": f"new{page}"}}
+        ])
+
+    src = GithubSource(_client(handler), queries=[])
+    stamps = src.fetch_star_history("owner/repo", max_pages=3)
+    assert 1 in seen_pages
+    assert 5 in seen_pages          # 마지막 페이지를 긁었다
+    assert 4 in seen_pages          # 마지막에서 2번째도
+    assert 2 not in seen_pages      # 중간 페이지는 불필요
+    assert datetime(2026, 11, 9, tzinfo=timezone.utc) in stamps
+
+
 def test_fetch_readme_404_returns_none():
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.host == "raw.githubusercontent.com"

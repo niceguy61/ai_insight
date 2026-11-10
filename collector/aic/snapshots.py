@@ -94,14 +94,23 @@ def backfill_star_history(
     ).fetchall()
 
     processed = 0
-    for entry_id, slug, stars in entries:
+    consecutive_empty = 0
+    total = len(entries)
+    for idx, (entry_id, slug, stars) in enumerate(entries, start=1):
         try:
             stamps = gh.fetch_star_history(slug)
         except Exception:
-            continue  # 개별 엔트리 실패는 전체를 죽이지 않는다
+            stamps = []  # 개별 엔트리 실패는 전체를 죽이지 않는다
         if not stamps:
+            consecutive_empty += 1
+            if consecutive_empty >= 20:
+                print(f"[backfill] {idx}/{total} — 연속 20건 빈 응답(rate limit 추정), 백필 조기 중단", flush=True)
+                break
             continue
+        consecutive_empty = 0
         processed += 1
+        if idx % 10 == 0 or idx == total:
+            print(f"[backfill] {idx}/{total} processed (유효 {processed})", flush=True)
 
         for days in (1, 7):
             boundary = now - timedelta(days=days)

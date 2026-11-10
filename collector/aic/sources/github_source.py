@@ -2,8 +2,9 @@
 
 polite_get은 다른 어댑터(skills.sh, ClawHub 등)도 재사용하는 공통 429 처리다.
 """
+import re
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
 import httpx
@@ -132,17 +133,53 @@ class GithubSource(SourceAdapter):
         return None
 
     def fetch_star_history(self, full_name: str, max_pages: int = 10) -> list[datetime]:
+        """최근 스타 시각 목록. stargazers는 오래된 순 정렬이므로 Link rel=last로
+        마지막 페이지를 찾아 뒤에서부터 걷고, 8일 이전 데이터에 닿으면 조기 중단한다."""
         stamps: list[datetime] = []
-        for page in range(1, max_pages + 1):
-            url = f"{API_BASE}/repos/{full_name}/stargazers?per_page=100&page={page}"
-            resp = polite_get(self.client, url, headers=self._headers("application/vnd.github.star+json"))
-            if resp.status_code != 200:
-                break
-            batch = resp.json() or []
+        cutoff = datetime.now(timezone.utc) - timedelta(days=8)
+
+        def collect(batch: list) -> None:
             for entry in batch:
                 starred_at = entry.get("starred_at")
                 if starred_at:
                     stamps.append(datetime.fromisoformat(starred_at.replace("Z", "+00:00")))
-            if len(batch) < 100:
+
+        first = polite_get(
+            self.client,
+            f"{API_BASE}/repos/{full_name}/stargazers?per_page=100&page=1",
+            headers=self._headers("application/vnd.github.star+json"),
+        )
+        if first.status_code != 200:
+            return stamps
+        first_batch = first.json() or []
+        collect(first_batch)
+
+        last_page = 1
+        m = re.search(r'page=(\d+)>;\s*rel="last"', first.headers.get("Link", ""))
+        if m:
+            last_page = int(m.group(1))
+        if last_page == 1:
+            return stamps  # 전체 히스토리 100개 이하 — 최근 스타 포함
+
+        fetched = 1
+        page = last_page
+        while page >= 2 and fetched < max_pages:
+            resp = polite_get(
+                self.client,
+                f"{API_BASE}/repos/{full_name}/stargazers?per_page=100&page={page}",
+                headers=self._headers("application/vnd.github.star+json"),
+            )
+            if resp.status_code != 200:
                 break
+            batch = resp.json() or []
+            collect(batch)
+            fetched += 1
+            oldest = min(
+                datetime.fromisoformat(e["starred_at"].replace("Z", "+00:00"))
+                for e in batch
+                if e.get("starred_at")
+            ) if batch else None
+            if oldest is not None and oldest < cutoff:
+                break  # 7일치는 이미 충분히 확보
+            page -= 1
         return stamps
