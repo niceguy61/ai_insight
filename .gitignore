@@ -1,0 +1,20 @@
+# secrets
+.env
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# node
+node_modules/
+.next/
+out/
+
+# superpowers scratch
+.superpowers/
+
+# misc
+.DS_Store
+Thumbs.db
