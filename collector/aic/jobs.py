@@ -161,6 +161,14 @@ def _run_enrich(conn) -> dict:
 
 def _run_backfill(conn) -> dict:
     gh = _github(conn)
+    # 토큰 권한 사전 점검 — fine-grained PAT는 stargazers 접근이 막힐 수 있다
+    probe = gh.fetch_star_history("n8n-io/n8n", max_pages=1)
+    if not probe:
+        return {
+            "backfilled": 0,
+            "skipped": "스타 히스토리 조회 실패 — GITHUB_TOKEN 권한 확인 "
+                       "(classic 토큰 또는 fine-grained에 Public repositories read-only 필요)",
+        }
     processed = backfill_star_history(conn, gh, limit=BACKFILL_LIMIT, commit_each=True)
     updated = recompute_deltas(conn)
     conn.commit()
