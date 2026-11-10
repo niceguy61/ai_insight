@@ -130,7 +130,7 @@ header.site nav a:hover { color: var(--cobalt-ink); }
 .ledger { margin: 14px 0 48px; border-top: 1px solid var(--ink); }
 .slip {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) auto;
+  grid-template-columns: 44px minmax(0, 1fr) 80px auto;
   gap: 16px;
   padding: 14px 4px;
   border-bottom: 1px solid var(--hairline);
@@ -219,6 +219,21 @@ header.site nav a:hover { color: var(--cobalt-ink); }
 .slip .delta { font: 600 12px var(--mono); color: var(--rise); }
 .slip .delta .unit { color: var(--ink-soft); font-weight: 400; }
 .slip .installs { font: 12px var(--mono); color: var(--ink-soft); }
+.slip .spark { display: block; width: 72px; height: 26px; }
+.slip .sparkcell { display: flex; justify-content: flex-end; }
+.slip .momtag {
+  font: 600 11px var(--sans);
+  color: var(--rise);
+  border: 1px solid rgba(14, 159, 110, 0.4);
+  border-radius: 999px;
+  padding: 1px 8px;
+  flex: none;
+  white-space: nowrap;
+}
+@media (max-width: 760px) {
+  .slip { grid-template-columns: 30px minmax(0, 1fr) auto; }
+  .slip .sparkcell { display: none; }
+}
 
 /* ---------- 상세 ---------- */
 .detail h1 { font-size: 26px; line-height: 1.2; margin: 26px 0 6px; letter-spacing: -0.02em; display: flex; align-items: center; gap: 12px; }

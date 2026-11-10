@@ -36,7 +36,8 @@ def build_scheduler(conn_factory) -> BackgroundScheduler:
     sched = BackgroundScheduler(timezone="UTC")
     for name, hours in (("github", 6), ("snapshots", 6),
                         ("skills_sh", 12), ("clawhub", 12),
-                        ("mcp_registry", 24), ("npm", 24)):
+                        ("mcp_registry", 24), ("npm", 24),
+                        ("rank_ref", 24), ("trending", 12)):
         sched.add_job(_job(conn_factory, name), "interval", hours=hours,
                       id=f"source_{name}", max_instances=1, coalesce=True)
     sched.add_job(_job(conn_factory, "deltas"), "interval", hours=1,

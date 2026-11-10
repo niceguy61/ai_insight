@@ -11,6 +11,7 @@ from aic.enrich.summarizer import run_enrichment
 from aic.models import RawItem
 from aic.snapshots import backfill_star_history, capture_snapshots, recompute_deltas
 from aic.sources.clawhub import ClawhubSource
+from aic.sources.github_ranking import fetch_ranking
 from aic.sources.github_source import DEFAULT_QUERIES, GithubSource
 from aic.sources.mcp_registry import McpRegistrySource
 from aic.sources.npm_source import NpmSource
@@ -23,7 +24,7 @@ BACKFILL_LIMIT = 500
 
 VALID_SOURCES = {
     "github", "skills_sh", "clawhub", "mcp_registry",
-    "npm", "snapshots", "enrich", "backfill",
+    "npm", "snapshots", "enrich", "backfill", "rank_ref", "trending",
 }
 
 
@@ -166,6 +167,64 @@ def _run_backfill(conn) -> dict:
     return {"backfilled": processed, "deltas_updated": updated}
 
 
+# AI 타게팅 트렌딩 발굴 — github.com/trending(전 언어) 대신 AI 토픽 검색 기반
+TRENDING_QUERIES = [
+    "topic:ai-agents created:>2026-10-12",
+    "topic:mcp-server created:>2026-10-12",
+    "topic:claude-skills created:>2026-10-12",
+    "topic:ai-coding created:>2026-10-12",
+]
+
+
+def _run_rank_ref(conn) -> dict:
+    """EvanLi/Github-Ranking Top-100 전체 랭킹 스냅샷 → rank_reference (엔트리 아님, 참조 전용)."""
+    from datetime import date
+
+    with httpx.Client(timeout=HTTP_TIMEOUT) as client:
+        rows = fetch_ranking(client)
+    if not rows:
+        return {"items": 0, "skipped": "랭킹 파싱 실패"}
+    today = date.today()
+    for r in rows:
+        conn.execute(
+            """
+            INSERT INTO rank_reference (snapshot_date, repo_full_name, rank, stars, language, description)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (snapshot_date, repo_full_name) DO UPDATE SET
+                rank = EXCLUDED.rank, stars = EXCLUDED.stars, description = EXCLUDED.description
+            """,
+            (today, r["full_name"], r["rank"], r["stars"], r["language"], r["description"]),
+        )
+    return {"items": len(rows)}
+
+
+def _run_trending(conn) -> dict:
+    """AI 토픽 신생 발굴 — 최근 생성된 리포 중 별이 붙기 시작한 것."""
+    client = httpx.Client(timeout=HTTP_TIMEOUT)
+    gh = GithubSource(client, token=load_config().github_token or None,
+                      queries=TRENDING_QUERIES, max_per_query=200)
+    items = gh.fetch()
+    new = 0
+    for item in items:
+        p = item.payload
+        before = conn.execute("SELECT 1 FROM entries WHERE slug=%s", (item.external_id,)).fetchone()
+        upsert_entry(
+            conn, item, _github_kind(p),
+            repo_url=f"https://github.com/{item.external_id}",
+            canonical_name=p.get("name") or item.external_id,
+            homepage_url=p.get("homepage") or None,
+            license=(p.get("license") or {}).get("spdx_id"),
+            stars=p.get("stargazers_count"),
+            github_created_at=_parse_dt(p.get("created_at")),
+            github_pushed_at=_parse_dt(p.get("pushed_at")),
+            tags=p.get("topics") or None,
+        )
+        insert_raw_item(conn, item)
+        if not before:
+            new += 1
+    return {"items": len(items), "new": new}
+
+
 _JOBS = {
     "github": _run_github,
     "skills_sh": _run_skills_sh,
@@ -175,6 +234,8 @@ _JOBS = {
     "snapshots": _run_snapshots,
     "enrich": _run_enrich,
     "backfill": _run_backfill,
+    "rank_ref": _run_rank_ref,
+    "trending": _run_trending,
 }
 
 

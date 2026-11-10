@@ -1,6 +1,12 @@
 import Link from "next/link";
 import EntryCard from "../components/EntryCard";
-import { rankingEntries, type Entry, type Ranking } from "../db/queries";
+import {
+  rankingEntries,
+  starHistoryBatch,
+  momentumDays,
+  type Entry,
+  type Ranking,
+} from "../db/queries";
 import { CATEGORIES, KINDS, RANK_TABS } from "../lib/taxonomy";
 
 export const dynamic = "force-dynamic";
@@ -35,8 +41,15 @@ export default async function Home({ searchParams }: { searchParams: Promise<SP>
 
   let items: Entry[] = [];
   let error: string | null = null;
+  let history = new Map<string, { time: string; value: number }[]>();
+  let momentum = new Map<string, number>();
   try {
     items = await rankingEntries(tab, PAGE_SIZE, undefined, kind, category, (page - 1) * PAGE_SIZE);
+    history = await starHistoryBatch(items.map((e) => e.id), 14);
+    for (const [id, series] of history) {
+      const m = momentumDays(series);
+      if (m >= 2) momentum.set(id, m);
+    }
   } catch {
     error = "데이터베이스에 연결할 수 없습니다. docker compose up -d 후 새로고침하세요.";
   }
@@ -100,7 +113,13 @@ export default async function Home({ searchParams }: { searchParams: Promise<SP>
         <>
           <div className="ledger">
             {items.map((e, i) => (
-              <EntryCard key={e.id} entry={e} rank={(page - 1) * PAGE_SIZE + i + 1} />
+              <EntryCard
+                key={e.id}
+                entry={e}
+                rank={(page - 1) * PAGE_SIZE + i + 1}
+                spark={history.get(e.id) ?? []}
+                momentum={momentum.get(e.id)}
+              />
             ))}
           </div>
           <nav className="pager" aria-label="페이지">

@@ -134,7 +134,6 @@ export interface SearchParams {
   limit?: number;
   offset?: number;
 }
-
 function searchWhere({ q, category, kind }: SearchParams): SQL {
   const parts: SQL[] = [sql`entry_status = 'active'`];
   if (q && q.trim()) {
@@ -213,6 +212,78 @@ export async function getCrawlRuns(limit = 20, db: Db = getDb()): Promise<CrawlR
         FROM crawl_runs ORDER BY started_at DESC LIMIT ${limit}`,
   );
   return res.rows as unknown as CrawlRun[];
+}
+
+export interface StarPoint {
+  time: string; // YYYY-MM-DD
+  value: number;
+}
+
+/** 여러 엔트리의 일별 스타 히스토리를 한 번에 (리스트 스파크라인용). */
+export async function starHistoryBatch(
+  entryIds: string[],
+  days = 14,
+  db: Db = getDb(),
+): Promise<Map<string, StarPoint[]>> {
+  const out = new Map<string, StarPoint[]>();
+  if (entryIds.length === 0) return out;
+  const res = await db.execute(
+    sql`SELECT DISTINCT ON (entry_id, captured_at::date)
+               entry_id, captured_at::date AS day, (metrics->>'stars')::int AS stars
+        FROM metric_snapshots
+        WHERE entry_id IN (${sql.join(entryIds.map((id) => sql`${id}::uuid`), sql`, `)})
+          AND metrics ? 'stars' AND captured_at >= now() - ${sql.raw(`interval '${days} days'`)}
+        ORDER BY entry_id, captured_at::date, captured_at DESC`,
+  );
+  for (const row of res.rows as unknown as { entry_id: string; day: string; stars: number }[]) {
+    const list = out.get(row.entry_id) ?? [];
+    list.push({ time: String(row.day).slice(0, 10), value: row.stars });
+    out.set(row.entry_id, list);
+  }
+  return out;
+}
+
+/** 모멘텀: 시계열 끝에서 연속 상승 일수 (2일 이상일 때만 의미). */
+export function momentumDays(series: StarPoint[]): number {
+  if (series.length < 2) return 0;
+  let n = 0;
+  for (let i = series.length - 1; i > 0; i--) {
+    if (series[i].value > series[i - 1].value) n += 1;
+    else break;
+  }
+  return n;
+}
+
+/** 아카이브: 스냅샷이 존재하는 날짜 목록 (최근 60일). */
+export async function archiveDates(db: Db = getDb()): Promise<string[]> {
+  const res = await db.execute(
+    sql`SELECT DISTINCT captured_at::date AS day
+        FROM metric_snapshots WHERE metrics ? 'stars'
+        ORDER BY day DESC LIMIT 60`,
+  );
+  return (res.rows as unknown as { day: string }[]).map((r) => String(r.day).slice(0, 10));
+}
+
+/** 특정 날짜 기준 랭킹 (그날 마지막 스냅샷 값). */
+export async function archiveRanking(
+  date: string,
+  limit = 50,
+  db: Db = getDb(),
+): Promise<Entry[]> {
+  const res = await db.execute(
+    sql`SELECT ${ENTRY_COLS} FROM entries e
+        JOIN LATERAL (
+          SELECT (s.metrics->>'stars')::bigint AS day_stars
+          FROM metric_snapshots s
+          WHERE s.entry_id = e.id AND s.metrics ? 'stars'
+            AND s.captured_at::date = ${date}::date
+          ORDER BY s.captured_at DESC LIMIT 1
+        ) snap ON true
+        WHERE e.entry_status = 'active'
+        ORDER BY snap.day_stars DESC
+        LIMIT ${limit}`,
+  );
+  return res.rows as unknown as Entry[];
 }
 
 export async function getConfig(key: string, db: Db = getDb()): Promise<unknown> {

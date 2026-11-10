@@ -11,6 +11,8 @@ const SOURCES: { key: string; label: string }[] = [
   { key: "snapshots", label: "스냅샷" },
   { key: "enrich", label: "LLM 요약" },
   { key: "backfill", label: "스타 백필" },
+  { key: "rank_ref", label: "전체 랭킹 참조" },
+  { key: "trending", label: "AI 신규 발굴" },
 ];
 
 export default function RunButtons({ token, onDone }: { token: string; onDone?: () => void }) {

@@ -16,14 +16,25 @@ API_BASE = "https://api.github.com"
 RAW_BASE = "https://raw.githubusercontent.com"
 
 DEFAULT_QUERIES = [
+    # ① 에이전트 · 스킬 · 플러그인 (핵심 유니버스)
     "topic:mcp-server",
     "topic:claude-skills",
     "topic:agent-skills",
+    "topic:ai-agents",
+    "topic:claude-code",
+    # ② AI 코딩 · AI 생성 도구
+    "topic:ai-coding",
+    "topic:generative-ai",
+    "topic:ai-tools",
+    # ③ 이름/설명 매칭
     "mcp server in:name,description",
     "claude skill in:name,description",
-    # 신생 리포 발굴 — 최근 생성 + 별 많은 순 (매 실행 기준 6주)
+    "ai agent in:name,description",
+    "ai coding in:name,description",
+    # ④ 신생 발굴 — 최근 생성 + 별 많은 순 (6주)
     "topic:mcp-server created:>2026-09-29",
     "topic:claude-skills created:>2026-09-29",
+    "topic:ai-agents created:>2026-09-29",
 ]
 
 README_VARIANTS = ["README.md", "readme.md", "README.markdown", "README.rst", "README"]
