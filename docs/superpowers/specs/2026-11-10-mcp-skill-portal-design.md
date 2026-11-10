@@ -52,7 +52,7 @@ AI 에이전트 생태계의 핵심 부품 — **MCP 서버**와 **에이전트 
 ## 3. 제약
 
 - Windows 로컬 개발. Node 24.22 / npm 11.19 / Python 3.12 확인됨.
-- **PostgreSQL은 Docker Compose로 구동 (사용자 확정)** — 마일스톤 1의 첫 작업. M1에 "Docker Desktop 동작 확인" 단계 포함
+- **PostgreSQL은 Docker Compose로 구동 (사용자 확정)** — 마일스톤 1의 첫 작업. M1에 "Docker Desktop 동작 확인" 단계 포함. 호스트 포트 5434 (5433은 기존 컨테이너 점유)
 - GitHub 무인증 60 req/h, 검색 10 req/min → `.env`의 `GITHUB_TOKEN`으로 5,000 req/h 확보 (사용자가 키 발급·삽입)
 - skills.sh API는 Vercel OIDC 인증 필요(무인증 401 확인). **결정: 폴백 모드 우선 구현**(SSR 리더보드 파싱 + GitHub raw로 상세 대체), OIDC 어댑터는 추후 플러그인 구조로 추가
 - LLM 비용은 사용자의 NIM 키로 부담 → 요약은 `llm_cache`(입력 해시 기반)로 중복 호출 방지, README는 20KB 절단

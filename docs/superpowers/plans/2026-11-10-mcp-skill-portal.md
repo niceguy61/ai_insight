@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- PostgreSQL은 Docker Compose로 구동. 호스트 포트 **5433**, user/pass/db = `insight/insight/insight`
+- PostgreSQL은 Docker Compose로 구동. 호스트 포트 **5434**(기존 사용자 컨테이너와 충돌 피함), user/pass/db = `insight/insight/insight`
 - 모든 키는 `.env`에만 존재. 저장소에 커밋 금지 (`.env.example`만 커밋)
 - GitHub 무토큰 시 수집기는 동작하되 저속(요청 사이 sleep 1s). 토큰 있으면 sleep 0.2s
 - 모든 소스 어댑터: HTTP 429 → `Retry-After`만큼 대기 후 1회 재시도, 재차 429면 그 소스 실행을 정상 종료(stats에 기록)

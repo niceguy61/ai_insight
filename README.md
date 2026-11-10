@@ -11,7 +11,7 @@ AI 에이전트 생태계의 MCP 서버와 에이전트 스킬을 수집·정제
 |---|---|
 | `collector/` | Python 수집기 — 소스 어댑터(GitHub/skills.sh/ClawHub/MCP Registry/npm), 스냅샷, LLM 요약, 스케줄러, control API |
 | `web/` | Next.js 포털 — 랭킹·검색·상세 + `/admin` |
-| `docker-compose.yml` | PostgreSQL 17 (호스트 포트 5433) |
+| `docker-compose.yml` | PostgreSQL 17 (호스트 포트 5434) |
 
 ## 빠른 시작
 
