@@ -33,9 +33,9 @@ export default function EntryCard({ entry, rank }: { entry: Entry; rank?: number
         {rank !== undefined ? String(rank).padStart(2, "0") : ""}
       </span>
       <span className="who">
-        <span className="name">
-          {entry.canonical_name}
+        <span className="titlerow">
           <span className={`ktag ${entry.kind}`}>{KIND_LABEL[entry.kind] ?? entry.kind}</span>
+          <span className="name">{entry.canonical_name}</span>
         </span>
         {summary ? (
           <span className="brief">{summary}</span>
@@ -49,11 +49,15 @@ export default function EntryCard({ entry, rank }: { entry: Entry; rank?: number
         ) : null}
       </span>
       <span className="nums">
-        <span className="stars">★ {formatNumber(entry.stars)}</span>
+        <span className="stars">
+          <span className="icon">⭐</span>
+          {formatNumber(entry.stars)}
+        </span>
         {entry.stars_delta_7d && entry.stars_delta_7d > 0 ? (
-          <span className="delta">+{formatNumber(entry.stars_delta_7d)}/7d</span>
+          <span className="delta">▲ {formatNumber(entry.stars_delta_7d)}<span className="unit">/7d</span></span>
+        ) : entry.installs ? (
+          <span className="installs">📥 {formatNumber(entry.installs)}</span>
         ) : null}
-        {entry.installs ? <span className="delta">📥 {formatNumber(entry.installs)}</span> : null}
       </span>
     </Link>
   );

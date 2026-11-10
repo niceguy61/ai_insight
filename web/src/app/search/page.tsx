@@ -64,15 +64,15 @@ export default async function SearchPage({
       </form>
 
       <form style={{ display: "flex", gap: 8, margin: "10px 0 4px", flexWrap: "wrap", alignItems: "center" }}>
-        <select name="category" defaultValue={params.category ?? ""} aria-label="카테고리">
-          <option value="">모든 카테고리</option>
+        <select name="category" defaultValue={params.category ?? ""} aria-label="카테고리" className="select">
+          <option value="">모든 테마</option>
           {CATEGORIES.map((c) => (
             <option key={c} value={c}>
               {c}
             </option>
           ))}
         </select>
-        <select name="kind" defaultValue={params.kind ?? ""} aria-label="종류">
+        <select name="kind" defaultValue={params.kind ?? ""} aria-label="종류" className="select">
           <option value="">모든 종류</option>
           {KINDS.map((k) => (
             <option key={k.value} value={k.value}>

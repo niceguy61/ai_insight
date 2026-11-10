@@ -87,6 +87,15 @@ header.site nav a:hover { color: var(--cobalt-ink); }
 }
 .searchline button:hover { background: var(--cobalt); border-color: var(--cobalt); }
 
+.select {
+  font: 13px var(--sans);
+  padding: 8px 10px;
+  border: 1px solid var(--hairline);
+  background: var(--slip);
+  color: var(--ink);
+  border-radius: 0;
+}
+
 /* ---------- 랭킹 탭: 밑줄 선택 ---------- */
 .ranktabs { display: flex; gap: 22px; margin: 18px 0 0; border-bottom: 1px solid var(--hairline); }
 .ranktabs a {
@@ -121,64 +130,88 @@ header.site nav a:hover { color: var(--cobalt-ink); }
 .ledger { margin: 14px 0 48px; border-top: 1px solid var(--ink); }
 .slip {
   display: grid;
-  grid-template-columns: 44px 1fr auto;
-  gap: 14px;
-  padding: 13px 4px;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  gap: 16px;
+  padding: 14px 4px;
   border-bottom: 1px solid var(--hairline);
-  align-items: start;
+  align-items: center;
 }
 .slip:hover { background: #f3f1ea; }
 .slip .rank {
   font: 600 13px var(--mono);
   color: var(--ink-soft);
-  padding-top: 3px;
 }
 .slip .rank.top { color: var(--cobalt); font-size: 15px; }
 .slip .who { min-width: 0; }
-.slip .name { font-weight: 700; font-size: 15px; }
-.slip .name .ktag {
-  font: 600 10px var(--mono);
-  letter-spacing: 0.04em;
-  padding: 1px 6px;
-  margin-left: 8px;
-  vertical-align: 2px;
-  border: 1px solid var(--ink);
-  color: var(--ink);
+.slip .titlerow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
-.slip .name .ktag.mcp { background: var(--cobalt); border-color: var(--cobalt); color: #fff; }
-.slip .name .ktag.skill { background: var(--ink); color: var(--paper); }
-.slip .name .ktag.plugin { background: var(--paper); }
-.slip .name .ktag.library { background: var(--paper); color: var(--ink-soft); border-color: var(--ink-soft); }
-.slip .brief {
-  margin-top: 3px;
-  font-size: 13px;
-  color: var(--ink-soft);
+.slip .name {
+  font-weight: 700;
+  font-size: 15px;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}
+.slip .ktag {
+  font: 600 10px var(--mono);
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  flex: none;
+  border: 1px solid var(--ink);
+  color: var(--ink);
+  border-radius: 3px;
+}
+.slip .ktag.mcp { background: var(--cobalt); border-color: var(--cobalt); color: #fff; }
+.slip .ktag.skill { background: var(--ink); color: var(--paper); }
+.slip .ktag.plugin { background: var(--paper); }
+.slip .ktag.library { background: var(--paper); color: var(--ink-soft); border-color: var(--ink-soft); }
+.slip .brief {
+  margin-top: 5px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-soft);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .slip .cmd {
+  display: block;
   margin-top: 6px;
   font: 12px var(--mono);
   color: var(--cobalt-ink);
   background: var(--slip);
   border: 1px dashed var(--hairline);
   padding: 4px 8px;
-  display: inline-block;
-  max-width: 100%;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .slip .cmd::before { content: "$ "; color: var(--ink-soft); }
-.slip .nums { text-align: right; font-family: var(--mono); white-space: nowrap; }
-.slip .stars { font: 600 14px var(--mono); }
-.slip .delta { font: 600 12px var(--mono); color: var(--rise); display: block; margin-top: 2px; }
 .slip .pending {
-  margin-top: 4px;
-  font-size: 11px;
+  display: block;
+  margin-top: 5px;
+  font-size: 12px;
   color: var(--wait);
 }
+.slip .nums {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  white-space: nowrap;
+  min-width: 96px;
+}
+.slip .stars { font: 600 13px var(--sans); color: var(--ink); }
+.slip .stars .icon { color: #f5a623; margin-right: 3px; }
+.slip .delta { font: 600 12px var(--mono); color: var(--rise); }
+.slip .delta .unit { color: var(--ink-soft); font-weight: 400; }
+.slip .installs { font: 12px var(--mono); color: var(--ink-soft); }
 
 /* ---------- 상세 ---------- */
 .detail h1 { font-size: 26px; line-height: 1.2; margin: 26px 0 6px; letter-spacing: -0.02em; }
