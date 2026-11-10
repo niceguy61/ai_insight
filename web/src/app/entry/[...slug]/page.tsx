@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import InstallCommands from "../../../components/InstallCommands";
-import Sparkline from "../../../components/Sparkline";
+import StarChart from "../../../components/StarChart";
 import { getEntryBySlug } from "../../../db/queries";
-import { KIND_LABEL } from "../../../components/EntryCard";
+import { KIND_LABEL, avatarUrl } from "../../../components/EntryCard";
 
 export const dynamic = "force-dynamic";
 
@@ -44,7 +44,13 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
 
   return (
     <article className="detail">
-      <h1>{entry.canonical_name}</h1>
+      <h1>
+        {avatarUrl(entry) ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img className="davatar" src={avatarUrl(entry)!} alt="" width={44} height={44} />
+        ) : null}
+        {entry.canonical_name}
+      </h1>
       <div className="subline">
         <span className="mono">{KIND_LABEL[entry.kind] ?? entry.kind}</span>
         {entry.category ? <span>{entry.category}</span> : null}
@@ -72,7 +78,10 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
       </div>
 
       <section className="section">
-        <h2>요약</h2>
+        <h2>한 줄 · 상세 요약</h2>
+        {entry.summary_short_ko ? (
+          <p className="shortline">{entry.summary_short_ko}</p>
+        ) : null}
         {entry.summary_ko ? (
           <p className="prose" style={{ lineHeight: 1.7 }}>
             {entry.summary_ko}
@@ -96,8 +105,13 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
       </section>
 
       <section className="section">
-        <h2>스타 추이 · 최근 14일</h2>
-        <Sparkline points={entry.star_history.map((h) => h.stars)} />
+        <h2>스타 추이</h2>
+        <StarChart
+          points={entry.star_history.map((h) => ({
+            time: new Date(h.captured_at).toISOString().slice(0, 10),
+            value: h.stars,
+          }))}
+        />
       </section>
 
       <section className="section">

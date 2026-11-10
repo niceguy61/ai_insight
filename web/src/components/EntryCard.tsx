@@ -15,17 +15,23 @@ export function formatNumber(n: number | null | undefined): string {
   return String(n);
 }
 
+export function avatarUrl(entry: Entry): string | null {
+  if (!entry.repo_url?.includes("github.com/")) return null;
+  const owner = entry.repo_url.replace("https://github.com/", "").split("/")[0];
+  return owner ? `https://github.com/${owner}.png?size=48` : null;
+}
+
 function firstInstallCmd(entry: Entry): string | null {
   const cmds = entry.install_commands;
   if (cmds && cmds.length > 0 && cmds[0].cmd) return cmds[0].cmd;
   return null;
 }
 
-/** 랭킹 장부의 한 행(전표). 요약이 없으면 설치 명령을 앞세운다 — 이 포털의 산출물은 명령이니까. */
+/** 랭킹 장부의 한 행(전표). 한줄 요약(20자) → 설치 명령 → repo 경로 순으로 보여준다. */
 export default function EntryCard({ entry, rank }: { entry: Entry; rank?: number }) {
-  const summary = entry.summary_ko?.trim();
+  const short = entry.summary_short_ko?.trim() || entry.summary_ko?.trim();
   const cmd = firstInstallCmd(entry);
-  const repoPath = entry.repo_url?.replace("https://github.com/", "");
+  const avatar = avatarUrl(entry);
 
   return (
     <Link className="slip" href={`/entry/${entry.slug}`}>
@@ -34,17 +40,21 @@ export default function EntryCard({ entry, rank }: { entry: Entry; rank?: number
       </span>
       <span className="who">
         <span className="titlerow">
+          {avatar ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img className="avatar" src={avatar} alt="" width={22} height={22} loading="lazy" />
+          ) : null}
           <span className={`ktag ${entry.kind}`}>{KIND_LABEL[entry.kind] ?? entry.kind}</span>
           <span className="name">{entry.canonical_name}</span>
         </span>
-        {summary ? (
-          <span className="brief">{summary}</span>
+        {short ? (
+          <span className="brief">{short}</span>
         ) : cmd ? (
           <span className="cmd">{cmd}</span>
         ) : repoPath ? (
           <span className="brief">{repoPath}</span>
         ) : null}
-        {!summary && !cmd ? (
+        {!short && !cmd ? (
           <span className="pending">요약·설치법 준비 중 — 상세에서 원문 링크로 확인</span>
         ) : null}
       </span>

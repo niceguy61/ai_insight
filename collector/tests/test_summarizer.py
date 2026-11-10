@@ -13,6 +13,7 @@ from aic.store import insert_raw_item, upsert_entry
 SETTINGS = LlmSettings(base_url="https://x/v1", api_key="k", model="test-model")
 
 VALID_JSON = json.dumps({
+    "summary_short_ko": "노션 DB를 읽고 쓰는 MCP 서버",
     "summary_ko": "이 MCP 서버는 노션 데이터베이스를 읽고 씁니다.",
     "usage_ko": "claude mcp add 명령으로 등록한 뒤 사용합니다.",
     "install_commands": [{"target": "claude-code", "cmd": "claude mcp add notion -- npx @notionhq/notion-mcp-server"}],
@@ -56,14 +57,16 @@ def test_apply_summary_via_run_enrichment(db):
     assert llm.calls == 1
 
     row = db.execute(
-        "SELECT summary_ko, usage_ko, install_commands, tags, category, readme_hash"
+        "SELECT summary_short_ko, summary_ko, usage_ko, install_commands, tags, category, readme_hash"
         " FROM entries WHERE id=%s", (entry_id,),
     ).fetchone()
-    assert row[0].startswith("이 MCP 서버는")
-    assert row[2][0]["cmd"].startswith("claude mcp add")
-    assert row[3] == ["노션", "notion", "문서"]
-    assert row[4] == "생산성"
-    assert row[5] is not None
+    assert row[0] == "노션 DB를 읽고 쓰는 MCP 서버"
+    assert row[1].startswith("이 MCP 서버는")
+    assert row[2].startswith("claude mcp add 명령으로")
+    assert row[3][0]["cmd"].startswith("claude mcp add")
+    assert row[4] == ["노션", "notion", "문서"]
+    assert row[5] == "생산성"
+    assert row[6] is not None
 
 
 def test_second_run_hits_cache_without_llm_call(db):

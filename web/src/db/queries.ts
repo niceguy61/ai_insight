@@ -9,6 +9,7 @@ export interface Entry {
   kind: string;
   slug: string;
   canonical_name: string;
+  summary_short_ko: string | null;
   summary_ko: string | null;
   usage_ko: string | null;
   install_commands: { target: string; cmd: string }[] | null;
@@ -70,7 +71,7 @@ export function getDb(): Db {
 }
 
 const ENTRY_COLS = sql`
-  id, kind, slug, canonical_name, summary_ko, usage_ko, install_commands, tags,
+  id, kind, slug, canonical_name, summary_short_ko, summary_ko, usage_ko, install_commands, tags,
   category, repo_url, homepage_url, license, stars, stars_delta_24h, stars_delta_7d,
   installs, npm_downloads_monthly, github_created_at, github_pushed_at, entry_status
 `;
@@ -191,7 +192,7 @@ export async function getEntryBySlug(
     sql`SELECT captured_at, (metrics->>'stars')::int AS stars
         FROM metric_snapshots
         WHERE entry_id = ${entry.id} AND metrics ? 'stars'
-          AND captured_at >= now() - interval '14 days'
+          AND captured_at >= now() - interval '90 days'
         ORDER BY captured_at ASC`,
   );
   return {
