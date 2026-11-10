@@ -153,14 +153,16 @@ def _run_enrich(conn) -> dict:
     stats = run_enrichment(
         conn, settings, limit=100,
         readme_fetcher=gh.fetch_readme,
+        commit_each=True,  # 항목마다 커밋 — 웹에서 실시간 반영
     )
     return stats
 
 
 def _run_backfill(conn) -> dict:
     gh = _github(conn)
-    processed = backfill_star_history(conn, gh, limit=BACKFILL_LIMIT)
+    processed = backfill_star_history(conn, gh, limit=BACKFILL_LIMIT, commit_each=True)
     updated = recompute_deltas(conn)
+    conn.commit()
     return {"backfilled": processed, "deltas_updated": updated}
 
 

@@ -166,6 +166,7 @@ def run_enrichment(
     llm_client=None,
     min_stars: int = SUMMARY_MIN_STARS,
     min_installs: int = SUMMARY_MIN_INSTALLS,
+    commit_each: bool = False,
 ) -> dict:
     stats = {"summarized": 0, "cache_hits": 0, "failed": 0}
 
@@ -202,5 +203,7 @@ def run_enrichment(
 
         apply_summary(conn, entry["id"], result, readme_hash)
         stats["summarized"] += 1
+        if commit_each:
+            conn.commit()  # 하나가 끝날 때마다 웹에 바로 보이도록
 
     return stats

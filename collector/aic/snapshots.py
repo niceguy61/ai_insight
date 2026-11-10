@@ -77,6 +77,7 @@ def backfill_star_history(
     gh,
     limit: int = 500,
     now: datetime | None = None,
+    commit_each: bool = False,
 ) -> int:
     """stars 상위 limit개 엔트리의 starred_at 히스토리로 1일/7일 경계 스냅샷을 합성.
 
@@ -140,4 +141,6 @@ def backfill_star_history(
         ).fetchone()
         if not insert_exists:
             insert_metric_snapshot(conn, entry_id, "github", {"stars": stars}, captured_at=now)
+        if commit_each:
+            conn.commit()
     return processed
