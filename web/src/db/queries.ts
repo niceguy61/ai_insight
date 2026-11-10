@@ -2,7 +2,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
-export type Ranking = "stars" | "trending" | "new" | "installs";
+export type Ranking = "stars" | "trending" | "new" | "installs" | "recent";
 
 export interface Entry {
   id: string;
@@ -84,6 +84,8 @@ function orderByFor(kind: Ranking): SQL {
       return sql`installs DESC NULLS LAST, stars DESC`;
     case "new":
       return sql`stars_delta_7d DESC NULLS LAST, stars DESC`;
+    case "recent":
+      return sql`github_created_at DESC NULLS LAST, stars DESC`;
     case "stars":
     default:
       return sql`stars DESC`;
@@ -94,6 +96,8 @@ function whereFor(kind: Ranking): SQL {
   switch (kind) {
     case "new":
       return sql`github_created_at > now() - interval '90 days'`;
+    case "recent":
+      return sql`stars > 0`;
     case "stars":
       return sql`github_pushed_at > now() - interval '180 days'`;
     default:
@@ -107,6 +111,7 @@ export async function rankingEntries(
   db: Db = getDb(),
   entryKind?: string,
   category?: string,
+  offset = 0,
 ): Promise<Entry[]> {
   const extra: SQL[] = [];
   if (entryKind) extra.push(sql`kind = ${entryKind}`);
@@ -116,7 +121,7 @@ export async function rankingEntries(
     sql`SELECT ${ENTRY_COLS} FROM entries
         WHERE entry_status = 'active' AND ${whereFor(kind)}${extraWhere}
         ORDER BY ${orderByFor(kind)}
-        LIMIT ${limit}`,
+        LIMIT ${limit} OFFSET ${offset}`,
   );
   return res.rows as unknown as Entry[];
 }

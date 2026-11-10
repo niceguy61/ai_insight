@@ -288,6 +288,19 @@ header.site nav a:hover { color: var(--cobalt-ink); }
 .empty { color: var(--ink-soft); padding: 48px 0; text-align: center; font-size: 14px; }
 .count-note { font-size: 12px; color: var(--ink-soft); margin: 10px 0 0; font-family: var(--mono); }
 
+/* ---------- 페이저 ---------- */
+.pager { display: flex; align-items: center; gap: 16px; margin: 0 0 48px; }
+.pgbtn {
+  font: 600 13px var(--sans);
+  padding: 7px 16px;
+  border: 1px solid var(--ink);
+  background: var(--slip);
+  color: var(--ink);
+}
+.pgbtn:hover { background: var(--cobalt); border-color: var(--cobalt); color: #fff; }
+.pgbtn.off { color: #b9b5ab; border-color: var(--hairline); pointer-events: none; }
+.pgnum { font: 12px var(--mono); color: var(--ink-soft); }
+
 footer.site {
   border-top: 2px solid var(--ink);
   color: var(--ink-soft);

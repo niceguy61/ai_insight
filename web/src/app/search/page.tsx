@@ -40,6 +40,7 @@ export default async function SearchPage({
     kind: pick("kind"),
     sort: pick("sort") as "stars" | "trending" | "relevance" | undefined,
     limit: 50,
+    offset: Math.max(0, Number(pick("offset") ?? "0") || 0),
   };
 
   let result: { items: Entry[]; total: number } | null = null;
@@ -92,12 +93,29 @@ export default async function SearchPage({
         <p className="empty">{error}</p>
       ) : result && result.total > 0 ? (
         <>
-          <p className="count-note">총 {result.total}개</p>
+          <p className="count-note">총 {result.total}개 · {offset + 1}~{Math.min(offset + limit, result.total)}</p>
           <div className="ledger">
             {result.items.map((e, i) => (
-              <EntryCard key={e.id} entry={e} rank={i + 1} />
+              <EntryCard key={e.id} entry={e} rank={offset + i + 1} />
             ))}
           </div>
+          <nav className="pager" aria-label="페이지">
+            {offset > 0 ? (
+              <Link className="pgbtn" href={`/search?q=${encodeURIComponent(params.q ?? "")}&category=${params.category ?? ""}&kind=${params.kind ?? ""}&sort=${params.sort ?? "stars"}&offset=${Math.max(0, offset - limit)}`}>
+                ← 이전
+              </Link>
+            ) : (
+              <span className="pgbtn off">← 이전</span>
+            )}
+            <span className="pgnum">{Math.floor(offset / limit) + 1}페이지</span>
+            {offset + limit < result.total ? (
+              <Link className="pgbtn" href={`/search?q=${encodeURIComponent(params.q ?? "")}&category=${params.category ?? ""}&kind=${params.kind ?? ""}&sort=${params.sort ?? "stars"}&offset=${offset + limit}`}>
+                다음 →
+              </Link>
+            ) : (
+              <span className="pgbtn off">다음 →</span>
+            )}
+          </nav>
         </>
       ) : (
         <p className="empty">검색 결과가 없습니다.</p>

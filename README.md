@@ -37,6 +37,6 @@ cd collector
 # 4. 포털 (다른 터미널)
 cd ..\web
 npm install                         # 최초 1회
-npm run dev                         # http://localhost:3000
+npm run dev                         # http://localhost:3001
 ```
 

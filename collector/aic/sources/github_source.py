@@ -21,6 +21,9 @@ DEFAULT_QUERIES = [
     "topic:agent-skills",
     "mcp server in:name,description",
     "claude skill in:name,description",
+    # 신생 리포 발굴 — 최근 생성 + 별 많은 순 (매 실행 기준 6주)
+    "topic:mcp-server created:>2026-09-29",
+    "topic:claude-skills created:>2026-09-29",
 ]
 
 README_VARIANTS = ["README.md", "readme.md", "README.markdown", "README.rst", "README"]

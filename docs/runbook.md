@@ -28,13 +28,13 @@ python -m venv .venv                 # 최초 1회
 # 5. 포털 (다른 터미널)
 cd ..\web
 npm install                          # 최초 1회
-npm run dev                          # http://localhost:3000
+npm run dev                          # http://localhost:3001
 ```
 
 ## 관리 화면
 
-- `http://localhost:3000/admin` — 수집 현황, 소스별 "지금 수집" 버튼
-- `http://localhost:3000/admin/settings` — LLM 엔드포인트·모델·키 설정
+- `http://localhost:3001/admin` — 수집 현황, 소스별 "지금 수집" 버튼
+- `http://localhost:3001/admin/settings` — LLM 엔드포인트·모델·키 설정
   (NVIDIA NIM / OpenRouter 프리셋은 모델 드롭다운 자동 로딩, 그 외는 직접 입력)
 - 접속 시 `.env`의 `ADMIN_TOKEN` 입력 (브라우저 localStorage에만 저장)
 

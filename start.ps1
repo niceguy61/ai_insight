@@ -18,8 +18,8 @@ Start-Process -FilePath "cmd.exe" `
 Start-Sleep -Seconds 2
 Write-Host ""
 Write-Host "기동 완료 (각 창은 최소화되어 실행 중):" -ForegroundColor Green
-Write-Host "  포털              http://localhost:3000"
+Write-Host "  포털              http://localhost:3001"
 Write-Host "  수집기 control API http://127.0.0.1:8111"
-Write-Host "  관리 화면          http://localhost:3000/admin"
+Write-Host "  관리 화면          http://localhost:3001/admin"
 Write-Host ""
 Write-Host "중지: docker compose stop + minimized 창 닫기"

@@ -90,7 +90,7 @@ def main() -> None:
 
     conn.commit()
     total = conn.execute("SELECT count(*) FROM entries").fetchone()[0]
-    print(f"\n[done] entries 총 {total}개 — 웹(http://localhost:3000)에서 확인하세요.")
+    print(f"\n[done] entries 총 {total}개 — 웹(http://localhost:3001)에서 확인하세요.")
 
 
 if __name__ == "__main__":

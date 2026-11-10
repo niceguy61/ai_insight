@@ -286,7 +286,7 @@ def test_same_repo_from_two_sources_merges(test_db_conn):
 - Produces: 렌더링된 3페이지 + `Sparkline(points: number[]): JSX`(의존성 없는 SVG), `InstallCommands(cmds: {target, cmd}[]): JSX`(복사 버튼)
 
 - [ ] **Step 1: 페이지 구현** — `/`는 탭(전체 스타/급상승/신규 급상승/설치수)+검색창+EntryCard 목록, `/search`는 q·category·kind 필터(서버 컴포넌트, searchParams), `/entry/[slug]`는 한국어 요약·사용법·설치법(타깃별 복사 버튼)·출처 링크 목록·Sparkline·보안 감사(있으면). 요약이 NULL이면 "요약 준비 중" 배지 + 원문 링크는 항상 표시
-- [ ] **Step 2: 빌드·렌더 확인** — `npm run build` 성공, `npm run dev` 후 `curl -s localhost:3000 | grep ai_insight`, 빈 DB에서도 3페이지 모두 200
+- [ ] **Step 2: 빌드·렌더 확인** — `npm run build` 성공, `npm run dev` 후 `curl -s localhost:3001 | grep ai_insight`, 빈 DB에서도 3페이지 모두 200
 - [ ] **Step 3: Commit** — `feat: portal pages`
 
 ### Task 13: /admin 대시보드 + LLM 설정 UI

@@ -97,6 +97,18 @@ describe("rankingEntries", () => {
     expect(items.map((e) => e.slug)).toEqual(["d/installs"]);
   });
 
+  it("최신 탭: 생성일 최신순", async () => {
+    const items = await rankingEntries("recent", 10, db);
+    expect(items[0].slug).toBe("e/new"); // 10일 전 생성이 가장 최신
+  });
+
+  it("오프셋 페이징: 2페이지는 1페이지와 겹치지 않는다", async () => {
+    const page1 = await rankingEntries("stars", 2, db);
+    const page2 = await rankingEntries("stars", 2, db, undefined, undefined, 2);
+    expect(page1.map((e) => e.slug)).toEqual(["a/stars", "b/trend"]);
+    expect(page2.map((e) => e.slug)).toEqual(["c/null", "f/notion"]);
+  });
+
   it("카테고리 필터도 랭킹에서 동작", async () => {
     const items = await rankingEntries("stars", 10, db, undefined, "생산성");
     expect(items.map((e) => e.slug)).toContain("f/notion");
