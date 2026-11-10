@@ -4,7 +4,7 @@
 이전 시점 스냅샷이 없으면 NULL(데이터 부족) — 0이 아니라 "판단 불가"로 둔다.
 """
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from psycopg import Connection

@@ -25,18 +25,37 @@ DEFAULT_QUERIES = [
 README_VARIANTS = ["README.md", "readme.md", "README.markdown", "README.rst", "README"]
 
 
-def polite_get(client: httpx.Client, url: str, **kw) -> httpx.Response:
-    """GET 한 번. 429면 Retry-After만큼 대기 후 1회 재시도.
+def _is_rate_limited(resp: httpx.Response) -> bool:
+    """429 또는 GitHub식 403+Remaining:0 (GitHub은 rate limit을 403으로도 반환)."""
+    if resp.status_code == 429:
+        return True
+    return resp.status_code == 403 and resp.headers.get("X-RateLimit-Remaining") == "0"
 
-    재시도 후에도 429면 429 응답을 그대로 돌려준다(호출자가 정상 종료 판단).
+
+def _retry_delay(resp: httpx.Response) -> float:
+    raw = resp.headers.get("Retry-After")
+    if raw:
+        try:
+            return min(float(raw), 60.0)
+        except ValueError:
+            pass
+    reset = resp.headers.get("X-RateLimit-Reset")
+    if reset:
+        try:
+            return min(max(float(reset) - time.time(), 0.0), 60.0)
+        except ValueError:
+            pass
+    return 5.0
+
+
+def polite_get(client: httpx.Client, url: str, **kw) -> httpx.Response:
+    """GET 한 번. 429(또는 GitHub식 403 rate limit)면 Retry-After만큼 대기 후 1회 재시도.
+
+    재시도 후에도 막히면 마지막 응답을 그대로 돌려준다(호출자가 정상 종료 판단).
     """
     resp = client.get(url, **kw)
-    if resp.status_code == 429:
-        try:
-            delay = min(float(resp.headers.get("Retry-After", "5") or 5), 60.0)
-        except ValueError:
-            delay = 5.0
-        time.sleep(delay)
+    if _is_rate_limited(resp):
+        time.sleep(_retry_delay(resp))
         resp = client.get(url, **kw)
     return resp
 

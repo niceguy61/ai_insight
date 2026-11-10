@@ -77,6 +77,41 @@ def test_polite_get_retries_after_429_then_succeeds():
     assert state["n"] == 2  # 429 후 1회 재시도
 
 
+def test_polite_get_retries_github_403_rate_limit():
+    """GitHub은 rate limit을 403 + X-RateLimit-Remaining: 0 으로도 반환한다."""
+    state = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        state["n"] += 1
+        if state["n"] == 1:
+            return httpx.Response(
+                403,
+                headers={"X-RateLimit-Remaining": "0", "Retry-After": "0"},
+                text="rate limit exceeded",
+            )
+        return httpx.Response(200, json=_search_body(["a/one"]),
+                              headers={"X-RateLimit-Remaining": "4000"})
+
+    src = GithubSource(_client(handler), queries=["topic:mcp"], per_page=2)
+    items = src.fetch()
+    assert [i.external_id for i in items] == ["a/one"]
+    assert state["n"] == 2
+
+
+def test_polite_get_does_not_retry_plain_403():
+    """403이라도 rate limit 표시가 없으면 재시도하지 않는다 (권한 오류일 수 있음)."""
+    state = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        state["n"] += 1
+        return httpx.Response(403, text="forbidden")
+
+    src = GithubSource(_client(handler), queries=["topic:mcp"], per_page=2)
+    items = src.fetch()
+    assert items == []
+    assert state["n"] == 1  # 재시도 없음
+
+
 def test_fetch_returns_empty_on_persistent_429():
     state = {"n": 0}
 

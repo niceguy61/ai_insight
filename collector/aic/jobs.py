@@ -11,7 +11,7 @@ from aic.enrich.summarizer import run_enrichment
 from aic.models import RawItem
 from aic.snapshots import backfill_star_history, capture_snapshots, recompute_deltas
 from aic.sources.clawhub import ClawhubSource
-from aic.sources.github_source import GithubSource
+from aic.sources.github_source import DEFAULT_QUERIES, GithubSource
 from aic.sources.mcp_registry import McpRegistrySource
 from aic.sources.npm_source import NpmSource
 from aic.sources.skills_sh import SkillsShSource
@@ -33,7 +33,7 @@ def _github(conn) -> GithubSource:
     return GithubSource(
         client,
         token=cfg.github_token or None,
-        queries=list(GithubSource.DEFAULT_QUERIES),
+        queries=list(DEFAULT_QUERIES),
     )
 
 
