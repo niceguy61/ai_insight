@@ -5,7 +5,7 @@ admin UI가 save_settings로 테이블을 갱신하면 수집기가 즉시 따�
 """
 import json
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from urllib.parse import urlparse
 
 import httpx
@@ -18,6 +18,9 @@ PRESETS: dict[str, str] = {
     "openrouter": "https://openrouter.ai/api/v1",
 }
 
+_THINK_OPEN = "<" + "think" + ">"
+_THINK_RE = re.compile(_THINK_OPEN + r".*?" + "</" + "think" + ">", re.DOTALL)
+
 
 class LlmError(Exception):
     """LLM 호출 또는 응답 파싱 실패."""
@@ -28,6 +31,7 @@ class LlmSettings:
     base_url: str
     api_key: str | None
     model: str
+    extra: dict | None = None  # create()에 extra_body로 전달 (예: thinking 비활성화)
 
 
 def detect_provider(base_url: str) -> str | None:
@@ -47,6 +51,7 @@ def get_settings(conn) -> LlmSettings:
             base_url=v.get("base_url") or cfg.llm_base_url,
             api_key=v.get("api_key") or cfg.llm_api_key,
             model=v.get("model") or cfg.llm_model,
+            extra=v.get("extra"),
         )
     cfg = load_config()
     return LlmSettings(base_url=cfg.llm_base_url, api_key=cfg.llm_api_key, model=cfg.llm_model)
@@ -80,7 +85,7 @@ def list_models(s: LlmSettings, client: httpx.Client) -> list[str]:
 
 
 def _extract_json(text: str) -> dict:
-    t = text.strip()
+    t = _THINK_RE.sub("", text or "").strip()
     if t.startswith("```"):
         t = re.sub(r"^```[a-zA-Z]*\s*", "", t)
         t = re.sub(r"\s*```$", "", t)
@@ -107,17 +112,31 @@ def chat_json(
     client: OpenAI | None = None,
     timeout: float = 120.0,
 ) -> dict:
-    """chat.completions 1회 호출 후 첫 JSON 객체 추출. 실패 시 LlmError."""
+    """chat.completions 1회 호출 후 첫 JSON 객체 추출. 실패 시 LlmError.
+
+    s.extra가 있으면 extra_body로 전달(thinking 비활성화 등). 엔드포인트가
+    미지원으로 거부하면 extra_body 없이 1회 재시도한다.
+    """
     if client is None:
         client = OpenAI(base_url=s.base_url, api_key=s.api_key or "missing", timeout=timeout)
-    resp = client.chat.completions.create(
-        model=s.model,
-        messages=[
+    kwargs: dict = {
+        "model": s.model,
+        "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ],
-        temperature=0.2,
-    )
+        "temperature": 0.2,
+    }
+    if s.extra:
+        kwargs["extra_body"] = s.extra
+    try:
+        resp = client.chat.completions.create(**kwargs)
+    except Exception:
+        if "extra_body" in kwargs:
+            kwargs.pop("extra_body")
+            resp = client.chat.completions.create(**kwargs)
+        else:
+            raise
     content = resp.choices[0].message.content or ""
     return _extract_json(content)
 

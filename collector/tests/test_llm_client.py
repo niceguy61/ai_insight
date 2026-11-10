@@ -77,6 +77,49 @@ class _FakeClient:
         self.chat = _FakeChat(content)
 
 
+THINK_OPEN = "<" + "think" + ">"
+THINK_CLOSE = "</" + "think" + ">"
+
+
+def test_chat_json_strips_think_blocks():
+    s = LlmSettings(base_url="https://x/v1", api_key="k", model="m")
+    content = THINK_OPEN + "생각 중... 답은 {\"x\": 9}" + THINK_CLOSE + '{"a": 1}'
+    out = chat_json(s, "sys", "user", client=_FakeClient(content))
+    assert out == {"a": 1}
+
+
+def test_settings_roundtrip_extra(db):
+    save_settings(db, LlmSettings(base_url="https://integrate.api.nvidia.com/v1",
+                                  api_key="k", model="z-ai/glm-5.3-flash",
+                                  extra={"chat_template_kwargs": {"thinking": False}}))
+    s = get_settings(db)
+    assert s.model == "z-ai/glm-5.3-flash"
+    assert s.extra == {"chat_template_kwargs": {"thinking": False}}
+
+
+def test_chat_json_passes_extra_body_and_falls_back():
+    recorded = {"kwargs": []}
+
+    class _RecordingCompletions:
+        def create(self, **kwargs):
+            recorded["kwargs"].append(kwargs)
+            if len(recorded["kwargs"]) == 1:
+                raise RuntimeError("unsupported parameter: chat_template_kwargs")
+            return type("R", (), {"choices": [_FakeChoice('{"ok": true}') ]})()
+
+    class _RecordingClient:
+        def __init__(self):
+            self.chat = type("Chat", (), {})()
+            self.chat.completions = _RecordingCompletions()
+
+    s = LlmSettings(base_url="https://x/v1", api_key="k", model="m",
+                    extra={"chat_template_kwargs": {"thinking": False}})
+    out = chat_json(s, "sys", "user", client=_RecordingClient())
+    assert out == {"ok": True}
+    assert recorded["kwargs"][0].get("extra_body") == {"chat_template_kwargs": {"thinking": False}}
+    assert "extra_body" not in recorded["kwargs"][1]
+
+
 def test_chat_json_plain_and_codefence():
     s = LlmSettings(base_url="https://x/v1", api_key="k", model="m")
     out = chat_json(s, "sys", "user", client=_FakeClient('{"a": 1, "b": ["x"]}'))
