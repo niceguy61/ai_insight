@@ -93,23 +93,23 @@ export default async function SearchPage({
         <p className="empty">{error}</p>
       ) : result && result.total > 0 ? (
         <>
-          <p className="count-note">총 {result.total}개 · {offset + 1}~{Math.min(offset + limit, result.total)}</p>
+          <p className="count-note">총 {result.total}개 · {params.offset + 1}~{Math.min(params.offset + params.limit, result.total)}</p>
           <div className="ledger">
             {result.items.map((e, i) => (
-              <EntryCard key={e.id} entry={e} rank={offset + i + 1} />
+              <EntryCard key={e.id} entry={e} rank={params.offset + i + 1} />
             ))}
           </div>
           <nav className="pager" aria-label="페이지">
-            {offset > 0 ? (
-              <Link className="pgbtn" href={`/search?q=${encodeURIComponent(params.q ?? "")}&category=${params.category ?? ""}&kind=${params.kind ?? ""}&sort=${params.sort ?? "stars"}&offset=${Math.max(0, offset - limit)}`}>
+            {params.offset > 0 ? (
+              <Link className="pgbtn" href={`/search?q=${encodeURIComponent(params.q ?? "")}&category=${params.category ?? ""}&kind=${params.kind ?? ""}&sort=${params.sort ?? "stars"}&offset=${Math.max(0, params.offset - params.limit)}`}>
                 ← 이전
               </Link>
             ) : (
               <span className="pgbtn off">← 이전</span>
             )}
-            <span className="pgnum">{Math.floor(offset / limit) + 1}페이지</span>
-            {offset + limit < result.total ? (
-              <Link className="pgbtn" href={`/search?q=${encodeURIComponent(params.q ?? "")}&category=${params.category ?? ""}&kind=${params.kind ?? ""}&sort=${params.sort ?? "stars"}&offset=${offset + limit}`}>
+            <span className="pgnum">{Math.floor(params.offset / params.limit) + 1}페이지</span>
+            {params.offset + params.limit < result.total ? (
+              <Link className="pgbtn" href={`/search?q=${encodeURIComponent(params.q ?? "")}&category=${params.category ?? ""}&kind=${params.kind ?? ""}&sort=${params.sort ?? "stars"}&offset=${params.offset + params.limit}`}>
                 다음 →
               </Link>
             ) : (
