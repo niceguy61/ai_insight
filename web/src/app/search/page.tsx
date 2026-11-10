@@ -1,3 +1,4 @@
+import Link from "next/link";
 import EntryCard from "../../components/EntryCard";
 import { searchEntries, type Entry } from "../../db/queries";
 
