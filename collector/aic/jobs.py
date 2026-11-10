@@ -160,19 +160,13 @@ def _run_enrich(conn) -> dict:
 
 
 def _run_backfill(conn) -> dict:
-    gh = _github(conn)
-    # 토큰 권한 사전 점검 — fine-grained PAT는 stargazers 접근이 막힐 수 있다
-    probe = gh.fetch_star_history("n8n-io/n8n", max_pages=1)
-    if not probe:
-        return {
-            "backfilled": 0,
-            "skipped": "스타 히스토리 조회 실패 — GITHUB_TOKEN 권한 확인 "
-                       "(classic 토큰 또는 fine-grained에 Public repositories read-only 필요)",
-        }
-    processed = backfill_star_history(conn, gh, limit=BACKFILL_LIMIT, commit_each=True)
-    updated = recompute_deltas(conn)
-    conn.commit()
-    return {"backfilled": processed, "deltas_updated": updated}
+    """2026-11 기준 GitHub가 stargazer 목록 API를 철수(REST 404/401, GraphQL 빈 배열)하여
+    starred_at 백필이 불가능하다. 급상승은 자체 스냅샷(6시간 주기) 축적으로 대체한다."""
+    return {
+        "backfilled": 0,
+        "skipped": "GitHub가 stargazer 이력 API를 철수하여 백필 불가 — "
+                   "스냅샷이 6시간 주기로 축적되며, 급상승 탭은 축적분으로 활성화됩니다",
+    }
 
 
 # AI 타게팅 트렌딩 발굴 — github.com/trending(전 언어) 대신 AI 토픽 검색 기반

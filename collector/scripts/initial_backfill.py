@@ -47,11 +47,8 @@ def main() -> None:
         ("github fetch (검색 + 저장 + 스냅샷)", lambda: _run_github(conn)),
         ("snapshots 캡처", lambda: _run_snapshots(conn)),
     ]
-    if cfg.github_token:
-        steps.append(("star history backfill (상위 500)", lambda: _run_backfill(conn)))
-    else:
-        print("\n=== star history backfill: GITHUB_TOKEN 미설정 — 스킵 ===")
-        print("  (토큰이 있어야 500개 리포의 히스토리를 무리 없이 복원합니다)")
+    print("\n=== star history backfill: GitHub가 stargazer 이력 API 철수로 스킵 ===")
+    print("  (급상승은 스냅샷 축적으로 활성화 — 24h 델타는 내일부터)")
     for label, fn in steps:
         print(f"\n=== {label} ===")
         try:
