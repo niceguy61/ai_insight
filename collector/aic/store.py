@@ -137,6 +137,21 @@ def attach_appearance(
     )
 
 
+def insert_metric_snapshot(
+    conn: Connection,
+    entry_id: uuid.UUID,
+    source: str,
+    metrics: dict,
+    captured_at: datetime | None = None,
+) -> None:
+    """지표 스냅샷 1건 기록. captured_at 기본은 now."""
+    conn.execute(
+        "INSERT INTO metric_snapshots (entry_id, source, captured_at, metrics)"
+        " VALUES (%s, %s, COALESCE(%s, now()), %s)",
+        (entry_id, source, captured_at, json.dumps(metrics)),
+    )
+
+
 def insert_raw_item(conn: Connection, item: RawItem, ttl_days: int = 30) -> None:
     expires = datetime.now(timezone.utc) + timedelta(days=ttl_days)
     conn.execute(
