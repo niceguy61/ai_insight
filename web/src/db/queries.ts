@@ -104,10 +104,16 @@ export async function rankingEntries(
   kind: Ranking,
   limit = 50,
   db: Db = getDb(),
+  entryKind?: string,
+  category?: string,
 ): Promise<Entry[]> {
+  const extra: SQL[] = [];
+  if (entryKind) extra.push(sql`kind = ${entryKind}`);
+  if (category) extra.push(sql`category = ${category}`);
+  const extraWhere = extra.length ? sql` AND ${sql.join(extra, sql` AND `)}` : sql``;
   const res = await db.execute(
     sql`SELECT ${ENTRY_COLS} FROM entries
-        WHERE entry_status = 'active' AND ${whereFor(kind)}
+        WHERE entry_status = 'active' AND ${whereFor(kind)}${extraWhere}
         ORDER BY ${orderByFor(kind)}
         LIMIT ${limit}`,
   );

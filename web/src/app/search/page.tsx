@@ -52,15 +52,18 @@ export default async function SearchPage({
 
   return (
     <div>
-      <form className="filterbar" style={{ display: "flex", gap: 8, margin: "16px 0", flexWrap: "wrap" }}>
+      <form className="searchline" action="/search">
         <input
           type="search"
           name="q"
           defaultValue={params.q}
           placeholder="검색어 (이름·요약·태그)"
           aria-label="검색어"
-          style={{ flex: 1, minWidth: 200, background: "#161b22", border: "1px solid #21262d", color: "#e6edf3", borderRadius: 8, padding: "8px 12px" }}
         />
+        <button type="submit">검색</button>
+      </form>
+
+      <form style={{ display: "flex", gap: 8, margin: "10px 0 4px", flexWrap: "wrap", alignItems: "center" }}>
         <select name="category" defaultValue={params.category ?? ""} aria-label="카테고리">
           <option value="">모든 카테고리</option>
           {CATEGORIES.map((c) => (
@@ -89,10 +92,10 @@ export default async function SearchPage({
         <p className="empty">{error}</p>
       ) : result && result.total > 0 ? (
         <>
-          <p style={{ color: "#8b949e", fontSize: 13 }}>총 {result.total}개</p>
-          <div className="list">
-            {result.items.map((e) => (
-              <EntryCard key={e.id} entry={e} />
+          <p className="count-note">총 {result.total}개</p>
+          <div className="ledger">
+            {result.items.map((e, i) => (
+              <EntryCard key={e.id} entry={e} rank={i + 1} />
             ))}
           </div>
         </>

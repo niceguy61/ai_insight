@@ -15,6 +15,14 @@ AI 에이전트 생태계의 MCP 서버와 에이전트 스킬을 수집·정제
 
 ## 빠른 시작
 
+**한 줄 기동 (권장):**
+
+```powershell
+.\start.ps1   # DB + 수집기 + 포털 전부 기동
+```
+
+**수동으로 각각 띄울 때:**
+
 ```powershell
 # 1. DB 기동
 docker compose up -d
@@ -22,14 +30,13 @@ docker compose up -d
 # 2. 환경설정 (.env 를 만들고 키를 채운다)
 copy .env.example .env
 
-# 3. 수집기 (Python 3.12)
+# 3. 수집기 — 주의: python 이 아니라 .venv 의 python 을 쓴다
 cd collector
-python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt
-.venv\Scripts\python -m aic.main
+.venv\Scripts\python -m aic.main    # 127.0.0.1:8111
 
-# 4. 포털 (Node 24)
+# 4. 포털 (다른 터미널)
 cd ..\web
-npm install
-npm run dev   # http://localhost:3000
+npm install                         # 최초 1회
+npm run dev                         # http://localhost:3000
 ```
+

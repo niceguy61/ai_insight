@@ -91,6 +91,17 @@ describe("rankingEntries", () => {
     expect(items[0].slug).toBe("d/installs");
     expect(items[0].installs).toBe(900);
   });
+
+  it("종류 필터: kind가 지정되면 해당 종류만", async () => {
+    const items = await rankingEntries("stars", 10, db, "skill");
+    expect(items.map((e) => e.slug)).toEqual(["d/installs"]);
+  });
+
+  it("카테고리 필터도 랭킹에서 동작", async () => {
+    const items = await rankingEntries("stars", 10, db, undefined, "생산성");
+    expect(items.map((e) => e.slug)).toContain("f/notion");
+    expect(items.map((e) => e.slug)).not.toContain("a/stars");
+  });
 });
 
 describe("searchEntries", () => {
