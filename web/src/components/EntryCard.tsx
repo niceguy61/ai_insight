@@ -32,6 +32,7 @@ export default function EntryCard({ entry, rank }: { entry: Entry; rank?: number
   const short = entry.summary_short_ko?.trim() || entry.summary_ko?.trim();
   const cmd = firstInstallCmd(entry);
   const avatar = avatarUrl(entry);
+  const repoPath = entry.repo_url?.replace("https://github.com/", "");
 
   return (
     <Link className="slip" href={`/entry/${entry.slug}`}>
