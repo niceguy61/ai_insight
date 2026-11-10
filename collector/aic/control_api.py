@@ -1,0 +1,70 @@
+"""수집기 control API — admin 전용(localhost 바인딩 + X-Admin-Token 게이트)."""
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from httpx import Client
+
+from aic.config import load_config
+from aic.enrich.llm_client import get_settings, list_models  # noqa: F401
+from aic.jobs import VALID_SOURCES, delete_expired_raw_items, run_job  # noqa: F401
+
+__all__ = ["create_app", "run_job", "delete_expired_raw_items"]
+
+
+def _authorized(request: Request) -> bool:
+    expected = load_config().admin_token
+    return request.headers.get("X-Admin-Token") == expected
+
+
+def create_app(conn_factory) -> FastAPI:
+    app = FastAPI(title="ai_insight collector", docs_url=None, redoc_url=None)
+
+    @app.post("/run/{source}")
+    async def run(source: str, request: Request):
+        if not _authorized(request):
+            return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+        if source not in VALID_SOURCES:
+            return JSONResponse(
+                {"ok": False, "error": f"unknown source: {source}",
+                 "valid": sorted(VALID_SOURCES)},
+                status_code=400,
+            )
+        conn = conn_factory()
+        try:
+            stats = run_job(conn, source)
+            conn.commit()
+            return {"ok": True, "source": source, "stats": stats}
+        finally:
+            conn.close()
+
+    @app.get("/status")
+    async def status(request: Request):
+        if not _authorized(request):
+            return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+        conn = conn_factory()
+        try:
+            rows = conn.execute(
+                """
+                SELECT id, source, kind, status, started_at, finished_at, stats, error
+                FROM crawl_runs ORDER BY started_at DESC LIMIT 20
+                """
+            ).fetchall()
+        finally:
+            conn.close()
+        cols = ["id", "source", "kind", "status", "started_at", "finished_at", "stats", "error"]
+        runs = [dict(zip(cols, r)) for r in rows]
+        return {"ok": True, "runs": runs}
+
+    @app.get("/llm/models")
+    async def llm_models(request: Request):
+        if not _authorized(request):
+            return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+        conn = conn_factory()
+        try:
+            settings = get_settings(conn)
+        finally:
+            conn.close()
+        with Client(timeout=15) as client:
+            models = list_models(settings, client)
+        return {"ok": True, "models": models}
+
+    return app

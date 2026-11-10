@@ -15,7 +15,8 @@ MIGRATIONS_DIR = REPO_ROOT / "collector" / "db" / "migrations"
 DEFAULT_TEST_DSN = "postgresql://insight:insight@localhost:5434/insight_test"
 
 
-def _test_dsn() -> str:
+def test_dsn() -> str:
+    """테스트 DB 접속 문자열(공개 헬퍼 — 라우트 테스트 등 별도 연결이 필요할 때)."""
     dsn = os.environ.get("DATABASE_URL_TEST")
     if dsn:
         return dsn
@@ -25,6 +26,9 @@ def _test_dsn() -> str:
             if line.strip().startswith("DATABASE_URL_TEST="):
                 return line.split("=", 1)[1].strip()
     return DEFAULT_TEST_DSN
+
+
+_test_dsn = test_dsn  # 하위 호환 별칭
 
 
 def _ensure_database(dsn: str) -> None:
