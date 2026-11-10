@@ -51,3 +51,45 @@ def fetch_ranking(client) -> list[dict]:
     if resp.status_code != 200:
         return []
     return parse_ranking(resp.text)
+
+
+_COMMITS_URL = (
+    "https://api.github.com/repos/EvanLi/Github-Ranking/commits"
+    "?path=Top100/Top-100-stars.md&per_page={per_page}"
+)
+
+
+def fetch_ranking_history(client, days: int = 35) -> list[dict]:
+    """커밋 히스토리에서 과거 N일치 Top-100 스냅샷을 복원.
+
+    반환: [{"date": "2026-10-15", "rows": [parse_ranking 결과]}, ...] (오래된 순)
+    GitHub API 1회 + raw fetch N회.
+    """
+    commits_resp = polite_get(client, _COMMITS_URL.format(per_page=days + 5))
+    if commits_resp.status_code != 200:
+        return []
+    commits = commits_resp.json() or []
+
+    snapshots: list[dict] = []
+    seen_dates: set[str] = set()
+    for commit in commits:
+        sha = commit.get("sha")
+        date = (commit.get("commit", {}).get("author", {}) or {}).get("date", "")
+        day = date[:10]
+        if not sha or not day or day in seen_dates:
+            continue
+        seen_dates.add(day)
+        raw = polite_get(
+            client,
+            f"https://raw.githubusercontent.com/EvanLi/Github-Ranking/{sha}/Top100/Top-100-stars.md",
+        )
+        if raw.status_code != 200:
+            continue
+        rows = parse_ranking(raw.text)
+        if rows:
+            snapshots.append({"date": day, "rows": rows})
+        if len(snapshots) >= days:
+            break
+
+    snapshots.sort(key=lambda s: s["date"])  # 오래된 → 최신
+    return snapshots

@@ -11,12 +11,12 @@ from aic.enrich.summarizer import run_enrichment
 from aic.models import RawItem
 from aic.snapshots import backfill_star_history, capture_snapshots, recompute_deltas
 from aic.sources.clawhub import ClawhubSource
-from aic.sources.github_ranking import fetch_ranking
+from aic.sources.github_ranking import fetch_ranking, fetch_ranking_history
 from aic.sources.github_source import DEFAULT_QUERIES, GithubSource
 from aic.sources.mcp_registry import McpRegistrySource
 from aic.sources.npm_source import NpmSource
 from aic.sources.skills_sh import SkillsShSource
-from aic.store import attach_appearance, insert_raw_item, upsert_entry
+from aic.store import attach_appearance, insert_metric_snapshot, insert_raw_item, upsert_entry
 
 HTTP_TIMEOUT = 30.0
 TRACKED_LIMIT = 3000  # 스냅샷 tracked 상한 (설계 문서 §3)
@@ -179,11 +179,18 @@ TRENDING_QUERIES = [
 
 
 def _run_rank_ref(conn) -> dict:
-    """EvanLi/Github-Ranking Top-100 전체 랭킹 스냅샷 → rank_reference (엔트리 아님, 참조 전용)."""
-    from datetime import date
+    """EvanLi/Github-Ranking Top-100 전체 랭킹 스냅샷 → rank_reference (엔트리 아님, 참조 전용).
+
+    + 커밋 히스토리 35일치를 복원해서, 우리 엔트리와 매칭되는 리포는
+    metric_snapshots에 합성 스냅샷(source='rank_ref')으로 주입한다.
+    → 차트·급상승 델타·스파크라인이 탑 리포 기준 30일로 확장된다.
+    """
+    from datetime import date, datetime
 
     with httpx.Client(timeout=HTTP_TIMEOUT) as client:
         rows = fetch_ranking(client)
+        history = fetch_ranking_history(client, days=35)
+
     if not rows:
         return {"items": 0, "skipped": "랭킹 파싱 실패"}
     today = date.today()
@@ -197,7 +204,57 @@ def _run_rank_ref(conn) -> dict:
             """,
             (today, r["full_name"], r["rank"], r["stars"], r["language"], r["description"]),
         )
-    return {"items": len(rows)}
+
+    # 히스토리 → rank_reference + 우리 엔트리 매칭분은 metric_snapshots 주입
+    hist_rows = 0
+    injected = 0
+    for snap in history:
+        day = snap["date"]
+        for r in snap["rows"]:
+            conn.execute(
+                """
+                INSERT INTO rank_reference (snapshot_date, repo_full_name, rank, stars, language, description)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (snapshot_date, repo_full_name) DO NOTHING
+                """,
+                (day, r["full_name"], r["rank"], r["stars"], r["language"], r["description"]),
+            )
+            hist_rows += 1
+
+        for r in snap["rows"]:
+            entry = conn.execute(
+                "SELECT id FROM entries WHERE repo_url = %s LIMIT 1",
+                (f"https://github.com/{r['full_name']}",),
+            ).fetchone()
+            if not entry:
+                continue
+            entry_id = entry[0]
+            captured = datetime.fromisoformat(day + "T23:59:00+00:00")
+            exists = conn.execute(
+                """
+                SELECT 1 FROM metric_snapshots
+                WHERE entry_id=%s AND source='rank_ref' AND captured_at::date=%s
+                LIMIT 1
+                """,
+                (entry_id, day),
+            ).fetchone()
+            if not exists:
+                insert_metric_snapshot(
+                    conn, entry_id, "rank_ref", {"stars": r["stars"]},
+                    captured_at=captured,
+                )
+                injected += 1
+    conn.commit()
+
+    updated = recompute_deltas(conn)
+    conn.commit()
+    return {
+        "items": len(rows),
+        "history_days": len(history),
+        "history_rows": hist_rows,
+        "snapshots_injected": injected,
+        "deltas_updated": updated,
+    }
 
 
 def _run_trending(conn) -> dict:
