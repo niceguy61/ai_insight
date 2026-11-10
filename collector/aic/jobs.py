@@ -152,9 +152,10 @@ def _run_enrich(conn) -> dict:
         return {"skipped": "LLM_API_KEY 미설정 — 요약 스킵"}
     gh = _github(conn)
     stats = run_enrichment(
-        conn, settings, limit=100,
+        conn, settings, limit=200,
         readme_fetcher=gh.fetch_readme,
         commit_each=True,  # 항목마다 커밋 — 웹에서 실시간 반영
+        workers=6,         # LLM 호출 6개 병렬
     )
     return stats
 

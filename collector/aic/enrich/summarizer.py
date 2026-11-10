@@ -173,8 +173,18 @@ def run_enrichment(
     min_stars: int = SUMMARY_MIN_STARS,
     min_installs: int = SUMMARY_MIN_INSTALLS,
     commit_each: bool = False,
+    workers: int = 1,
 ) -> dict:
+    """미요약 엔트리를 처리. workers>1이면 LLM 호출을 병렬로 (I/O 바운드).
+
+    - select_pending이 "요약 없는 것만" 고르므로 재실행 시 이어서 처리된다
+    - llm_cache로 동일 입력 재호출이 없다
+    - commit_each=True면 항목마다 커밋 → 웹 실시간 반영 + 중단 시 이어하기
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     stats = {"summarized": 0, "cache_hits": 0, "failed": 0}
+    tasks: list[tuple[dict, str, str, str]] = []
 
     for entry in select_pending(conn, limit=limit, min_stars=min_stars, min_installs=min_installs):
         readme = _get_readme(conn, entry, readme_fetcher)
@@ -188,28 +198,45 @@ def run_enrichment(
         cached = conn.execute(
             "SELECT output FROM llm_cache WHERE input_hash = %s", (input_hash,)
         ).fetchone()
+        if cached:
+            result = _normalize_result(cached[0])
+            apply_summary(conn, entry["id"], result, readme_hash)
+            stats["summarized"] += 1
+            stats["cache_hits"] += 1
+            if commit_each:
+                conn.commit()
+            continue
+
+        tasks.append((entry, readme_hash, system, user))
+
+    def _call(task):
+        entry, readme_hash, system, user = task
         try:
-            if cached:
-                result = _normalize_result(cached[0])
-                stats["cache_hits"] += 1
-            else:
-                raw = chat_json(settings, system, user, client=llm_client)
-                result = _normalize_result(raw)
+            raw = chat_json(settings, system, user, client=llm_client)
+            return task, _normalize_result(raw), None
+        except LlmError:
+            return task, None, "llm"
+
+    if tasks:
+        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+            futures = [pool.submit(_call, t) for t in tasks]
+            for fut in as_completed(futures):
+                (entry, readme_hash, sys_p, user_p), result, err = fut.result()
+                if err:
+                    stats["failed"] += 1
+                    continue
                 conn.execute(
                     """
                     INSERT INTO llm_cache (input_hash, model, kind, output)
                     VALUES (%s, %s, 'summary', %s)
                     ON CONFLICT (input_hash) DO NOTHING
                     """,
-                    (input_hash, settings.model, json.dumps(asdict(result), ensure_ascii=False)),
+                    (_fingerprint(f"{settings.model}\n{sys_p}\n{user_p}"), settings.model,
+                     json.dumps(asdict(result), ensure_ascii=False)),
                 )
-        except LlmError:
-            stats["failed"] += 1
-            continue
-
-        apply_summary(conn, entry["id"], result, readme_hash)
-        stats["summarized"] += 1
-        if commit_each:
-            conn.commit()  # 하나가 끝날 때마다 웹에 바로 보이도록
+                apply_summary(conn, entry["id"], result, readme_hash)
+                stats["summarized"] += 1
+                if commit_each:
+                    conn.commit()  # 하나씩 커밋 — 웹 실시간 반영 + 중단 시 이어하기
 
     return stats
