@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { adminToken } from "../../../../lib/env";
-import { getDb, type SQL } from "../../../../db/queries";
+import { getDb } from "../../../../db/queries";
 
 export const dynamic = "force-dynamic";
 

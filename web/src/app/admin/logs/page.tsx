@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import AdminTokenGate, { useAdminToken } from "../../components/AdminTokenGate";
+import AdminTokenGate, { useAdminToken } from "../../../components/AdminTokenGate";
 
 interface CrawlRun {
   id: string;
