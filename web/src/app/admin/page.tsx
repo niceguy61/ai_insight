@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import AdminTokenGate, { useAdminToken } from "../../components/AdminTokenGate";
+import StatsPanel from "./StatsPanel";
 import RunButtons from "./RunButtons";
 
 interface CrawlRun {
@@ -51,6 +52,7 @@ export default function AdminPage() {
     <AdminTokenGate token={token} loaded={loaded}>
       <div>
         <h1 style={{ fontSize: 20, margin: "18px 0 8px" }}>수집 관리</h1>
+        <StatsPanel token={token} />
         <RunButtons token={token} onDone={load} />
 
         <section className="section" style={{ marginTop: 24 }}>

@@ -24,3 +24,6 @@ tsconfig.tsbuildinfo
 
 # generated public data (regenerable via run_export.py)
 web/public/data/
+
+# separate deploy repo (GitHub Pages)
+pages/

@@ -26,7 +26,7 @@ from aic.config import load_config  # noqa: E402
 from aic.public_export import build  # noqa: E402
 
 ROOT = Path(__file__).parents[2]
-SCAFFOLD = Path(__file__).parents[1] / "pages-repo-scaffold"
+SCAFFOLD = Path(__file__).parents[2] / "pages-repo-scaffold"
 SITE_SRC = ROOT / "web"
 
 
@@ -63,7 +63,10 @@ def _ensure_remote_repo(owner_repo: str) -> None:
 
 
 def _sync_site(repo: Path) -> None:
-    """프론트 소스를 pages repo로 동기화 (node_modules·.next 제외)."""
+    """프론트 소스를 pages repo로 동기화.
+
+    보안: app/admin·app/api는 로컬 전용 — 공개 repo에 절대 포함하지 않는다.
+    """
     site = repo / "site"
     site.mkdir(exist_ok=True)
     for item in ["src", "public"]:
@@ -71,7 +74,10 @@ def _sync_site(repo: Path) -> None:
         dst = site / item
         if dst.exists():
             shutil.rmtree(dst)
-        shutil.copytree(src, dst, ignore=shutil.ignore_patterns("data", "__pycache__"))
+        shutil.copytree(
+            src, dst,
+            ignore=shutil.ignore_patterns("data", "__pycache__", "admin", "api"),
+        )
     for f in ["package.json", "package-lock.json", "tsconfig.json", "next.config.mjs",
               "postcss.config.mjs", "next-env.d.ts"]:
         src = SITE_SRC / f
