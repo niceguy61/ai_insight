@@ -318,6 +318,7 @@ def run_job(conn, source: str) -> dict:
         "INSERT INTO crawl_runs (id, source, kind, status) VALUES (%s, %s, 'run', 'running')",
         (run_id, source),
     )
+    conn.commit()  # 즉시 확정 — 실행 중 run이 다른 세션에 보이고, HTTP 구간 동안 트랜잭션을 열어두지 않는다
     try:
         stats = _JOBS[source](conn)
         conn.execute(

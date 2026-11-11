@@ -1,5 +1,6 @@
 """수집기 엔트리포인트: migrate → 스케줄러 → control API(127.0.0.1:8111)."""
 import logging
+import socket
 from pathlib import Path
 
 import uvicorn
@@ -17,6 +18,16 @@ PORT = 8111
 
 
 def main() -> None:
+    # 단일 인스턴스 가드 — 스케줄러 중복 기동(job 2배 발화)을 원천 차단
+    probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        probe.bind((HOST, PORT))
+    except OSError:
+        logging.error("port %s already in use — another collector instance is running. Exiting.", PORT)
+        return
+    finally:
+        probe.close()
+
     cfg = load_config()
 
     conn = connect(cfg.database_url)

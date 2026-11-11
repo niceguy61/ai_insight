@@ -8,12 +8,22 @@ from aic.snapshots import recompute_deltas
 
 log = logging.getLogger(__name__)
 
+SWEEP_STALE_RUNS = """
+UPDATE crawl_runs
+SET status = 'error', finished_at = now(), error = 'interrupted (process restart or crash)'
+WHERE status = 'running' AND started_at < now() - interval '2 hours'
+"""
+
 
 def _job(conn_factory, name):
     def _run():
         conn = conn_factory()
         try:
             if name == "deltas":
+                # 좀비 run 정리 — 프로세스 크래시로 'running'인 채 남은 행 표시
+                cur = conn.execute(SWEEP_STALE_RUNS)
+                if cur.rowcount:
+                    log.warning("stale running runs marked error: %s", cur.rowcount)
                 count = recompute_deltas(conn)
                 log.info("deltas job: %s updated", count)
             elif name == "raw_cleanup":
@@ -39,9 +49,12 @@ def build_scheduler(conn_factory) -> BackgroundScheduler:
                         ("mcp_registry", 24), ("npm", 24),
                         ("rank_ref", 24), ("trending", 12)):
         sched.add_job(_job(conn_factory, name), "interval", hours=hours,
-                      id=f"source_{name}", max_instances=1, coalesce=True)
+                      id=f"source_{name}", max_instances=1, coalesce=True,
+                      misfire_grace_time=600, jitter=90)
     sched.add_job(_job(conn_factory, "deltas"), "interval", hours=1,
-                  id="deltas", max_instances=1, coalesce=True)
+                  id="deltas", max_instances=1, coalesce=True,
+                  misfire_grace_time=600, jitter=90)
     sched.add_job(_job(conn_factory, "raw_cleanup"), "interval", hours=24,
-                  id="raw_cleanup", max_instances=1, coalesce=True)
+                  id="raw_cleanup", max_instances=1, coalesce=True,
+                  misfire_grace_time=600, jitter=90)
     return sched

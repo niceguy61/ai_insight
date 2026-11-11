@@ -4,7 +4,9 @@
 admin UI가 save_settings로 테이블을 갱신하면 수집기가 즉시 따라간다.
 """
 import json
+import logging
 import re
+import time
 from dataclasses import asdict, dataclass, field
 from urllib.parse import urlparse
 
@@ -12,6 +14,8 @@ import httpx
 from openai import OpenAI
 
 from aic.config import load_config
+
+log = logging.getLogger(__name__)
 
 PRESETS: dict[str, str] = {
     "nvidia": "https://integrate.api.nvidia.com/v1",
@@ -110,15 +114,17 @@ def chat_json(
     user: str,
     *,
     client: OpenAI | None = None,
-    timeout: float = 120.0,
+    timeout: float = 60.0,
 ) -> dict:
     """chat.completions 1회 호출 후 첫 JSON 객체 추출. 실패 시 LlmError.
 
     s.extra가 있으면 extra_body로 전달(thinking 비활성화 등). 엔드포인트가
     미지원으로 거부하면 extra_body 없이 1회 재시도한다.
+    max_retries=1 — 긴 호출이 조용히 수 분 끌리지 않도록 SDK 재시도를 제한.
     """
     if client is None:
-        client = OpenAI(base_url=s.base_url, api_key=s.api_key or "missing", timeout=timeout)
+        client = OpenAI(base_url=s.base_url, api_key=s.api_key or "missing",
+                        timeout=timeout, max_retries=1)
     kwargs: dict = {
         "model": s.model,
         "messages": [
@@ -129,14 +135,23 @@ def chat_json(
     }
     if s.extra:
         kwargs["extra_body"] = s.extra
+    started = time.perf_counter()
     try:
         resp = client.chat.completions.create(**kwargs)
-    except Exception:
+    except Exception as exc:
+        log.warning("LLM call failed after %.1fs: %s", time.perf_counter() - started, exc)
         if "extra_body" in kwargs:
             kwargs.pop("extra_body")
-            resp = client.chat.completions.create(**kwargs)
+            retry_started = time.perf_counter()
+            try:
+                resp = client.chat.completions.create(**kwargs)
+            except Exception as retry_exc:
+                log.warning("LLM retry (no extra_body) failed after %.1fs: %s",
+                            time.perf_counter() - retry_started, retry_exc)
+                raise
         else:
             raise
+    log.info("LLM call ok in %.1fs (%s)", time.perf_counter() - started, s.model)
     content = resp.choices[0].message.content or ""
     return _extract_json(content)
 

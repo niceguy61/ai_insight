@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 
 
 def connect(dsn: str) -> psycopg.Connection:
-    return psycopg.connect(dsn)
+    """connect_timeout 10초 — Docker 포트 프록시 정체 시 무한 대기 대신 빠른 실패."""
+    return psycopg.connect(dsn, connect_timeout=10)
 
 
 def migrate(conn: psycopg.Connection, migrations_dir: Path) -> list[str]:

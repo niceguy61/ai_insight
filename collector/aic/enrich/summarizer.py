@@ -208,6 +208,9 @@ def run_enrichment(
             continue
 
         tasks.append((entry, readme_hash, system, user))
+        if commit_each:
+            # 항목마다 커밋 — README fetch(HTTP) 중 트랜잭션을 열어두지 않는다
+            conn.commit()
 
     def _call(task):
         entry, readme_hash, system, user = task
