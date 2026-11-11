@@ -27,3 +27,7 @@ web/public/data/
 
 # separate deploy repo (GitHub Pages)
 pages/
+
+logs/
+web/dev-server.log
+web/.next/

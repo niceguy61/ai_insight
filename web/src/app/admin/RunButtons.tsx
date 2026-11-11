@@ -32,7 +32,7 @@ export default function RunButtons({ token, onDone }: { token: string; onDone?: 
       });
       const body = await res.json().catch(() => ({}));
       if (res.ok && body.ok) {
-        setMessage(`✅ ${source}: ${JSON.stringify(body.stats)}`);
+        setMessage(`▶ ${source}: 시작됨 — 진행 상황은 아래 실행 기록에서 확인 (자동 갱신)`);
         router.refresh();
         onDone?.();
       } else {

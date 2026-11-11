@@ -108,6 +108,14 @@ def _extract_json(text: str) -> dict:
     raise LlmError(f"no valid JSON object in LLM response: {text[:120]!r}")
 
 
+def _is_rate_limit(exc: Exception) -> bool:
+    status = getattr(exc, "status_code", None)
+    if status == 429:
+        return True
+    text = str(exc).lower()
+    return "429" in text or "rate limit" in text or "too many requests" in text
+
+
 def chat_json(
     s: LlmSettings,
     system: str,
@@ -120,7 +128,8 @@ def chat_json(
 
     s.extra가 있으면 extra_body로 전달(thinking 비활성화 등). 엔드포인트가
     미지원으로 거부하면 extra_body 없이 1회 재시도한다.
-    max_retries=1 — 긴 호출이 조용히 수 분 끌리지 않도록 SDK 재시도를 제한.
+    429(rate limit)는 2/5/10초 백오프로 같은 요청을 재시도한다.
+    모든 실패는 LlmError로 변환 — 한 항목의 실패가 배치 전체를 죽이지 않게.
     """
     if client is None:
         client = OpenAI(base_url=s.base_url, api_key=s.api_key or "missing",
@@ -135,23 +144,37 @@ def chat_json(
     }
     if s.extra:
         kwargs["extra_body"] = s.extra
-    started = time.perf_counter()
-    try:
-        resp = client.chat.completions.create(**kwargs)
-    except Exception as exc:
-        log.warning("LLM call failed after %.1fs: %s", time.perf_counter() - started, exc)
-        if "extra_body" in kwargs:
-            kwargs.pop("extra_body")
-            retry_started = time.perf_counter()
+
+    variants: list[dict] = [kwargs]
+    if "extra_body" in kwargs:  # extra_body 미지원 엔드포인트용 폴백
+        variants.append({k: v for k, v in kwargs.items() if k != "extra_body"})
+    delays = (2.0, 5.0, 10.0)
+
+    resp = None
+    for vi, variant in enumerate(variants):
+        for attempt in range(len(delays) + 1):
+            started = time.perf_counter()
             try:
-                resp = client.chat.completions.create(**kwargs)
-            except Exception as retry_exc:
-                log.warning("LLM retry (no extra_body) failed after %.1fs: %s",
-                            time.perf_counter() - retry_started, retry_exc)
-                raise
-        else:
-            raise
-    log.info("LLM call ok in %.1fs (%s)", time.perf_counter() - started, s.model)
+                resp = client.chat.completions.create(**variant)
+                log.info("LLM call ok in %.1fs (%s)", time.perf_counter() - started, s.model)
+                break
+            except Exception as exc:
+                dt = time.perf_counter() - started
+                if attempt < len(delays) and _is_rate_limit(exc):
+                    log.warning("LLM 429 rate limited (%.1fs) — %.0fs 후 재시도 %d/%d",
+                                dt, delays[attempt], attempt + 1, len(delays))
+                    time.sleep(delays[attempt])
+                    continue
+                if vi + 1 < len(variants):
+                    log.warning("LLM call failed after %.1fs (%s) — extra_body 없이 재시도", dt, exc)
+                    break  # 다음 variant로
+                log.warning("LLM call failed after %.1fs: %s", dt, exc)
+                raise LlmError(f"LLM call failed: {exc}") from exc
+        if resp is not None:
+            break
+
+    if resp is None:
+        raise LlmError("LLM call failed: all attempts exhausted")
     content = resp.choices[0].message.content or ""
     return _extract_json(content)
 

@@ -217,7 +217,7 @@ def run_enrichment(
         try:
             raw = chat_json(settings, system, user, client=llm_client)
             return task, _normalize_result(raw), None
-        except LlmError:
+        except Exception:  # LlmError 외 원시 예외도 항목 단위 실패로만 처리
             return task, None, "llm"
 
     if tasks:

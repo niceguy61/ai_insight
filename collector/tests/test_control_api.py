@@ -33,13 +33,27 @@ def test_run_requires_admin_token():
 
 
 def test_run_with_token_and_monkeypatched_run_job(monkeypatch):
-    monkeypatch.setattr(control_api, "run_job", lambda conn, source: {"items": 3, "source": source})
+    calls: list[tuple[str, str]] = []
+
+    def fake_run_job(conn, source):
+        calls.append(("run_job", source))
+        return {"items": 3, "source": source}
+
+    monkeypatch.setattr(control_api, "run_job", fake_run_job)
     c = _client()
     r = c.post("/run/github", headers={"X-Admin-Token": TOKEN})
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is True
-    assert body["stats"] == {"items": 3, "source": "github"}
+    assert body["started"] is True  # 즉시 응답 — job은 백그라운드 스레드에서 실행
+
+    # 백그라운드 스레드가 run_job을 실제로 호출했는지 대기 후 확인
+    import time
+
+    deadline = time.time() + 5
+    while not calls and time.time() < deadline:
+        time.sleep(0.05)
+    assert ("run_job", "github") in calls
 
 
 def test_run_unknown_source_returns_400():

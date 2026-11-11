@@ -1,11 +1,14 @@
 """소스 수집 job의 공통 흐름: fetch → store → 스냅샷 → crawl_runs 기록."""
 import json
+import logging
 from datetime import datetime, timezone
 from uuid import uuid4
 
 import httpx
 
 from aic.config import load_config
+
+log = logging.getLogger(__name__)
 from aic.enrich.llm_client import get_settings
 from aic.enrich.summarizer import run_enrichment
 from aic.models import RawItem
@@ -155,7 +158,7 @@ def _run_enrich(conn) -> dict:
         conn, settings, limit=200,
         readme_fetcher=gh.fetch_readme,
         commit_each=True,  # 항목마다 커밋 — 웹에서 실시간 반영
-        workers=6,         # LLM 호출 6개 병렬
+        workers=3,         # NVIDIA 무료 티어 429 회피 — 3병렬 + 백오프
     )
     return stats
 
@@ -327,10 +330,15 @@ def run_job(conn, source: str) -> dict:
         )
         return stats
     except Exception as exc:
-        conn.execute(
-            "UPDATE crawl_runs SET status='error', finished_at=now(), error=%s WHERE id=%s",
-            (str(exc)[:2000], run_id),
-        )
+        try:
+            conn.rollback()  # aborted 트랜잭션 정리 — 에러 기록 UPDATE가 가능하도록
+            conn.execute(
+                "UPDATE crawl_runs SET status='error', finished_at=now(), error=%s WHERE id=%s",
+                (str(exc)[:2000], run_id),
+            )
+            conn.commit()  # 에러 기록 확정 — 상위 rollback에 롤백되지 않게
+        except Exception:
+            log.exception("crawl_runs error 기록 실패 (%s)", run_id)
         raise
 
 

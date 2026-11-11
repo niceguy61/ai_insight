@@ -1,4 +1,7 @@
 """수집기 control API — admin 전용(localhost 바인딩 + X-Admin-Token 게이트)."""
+import logging
+import threading
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from httpx import Client
@@ -8,6 +11,25 @@ from aic.enrich.llm_client import get_settings, list_models  # noqa: F401
 from aic.jobs import VALID_SOURCES, delete_expired_raw_items, run_job  # noqa: F401
 
 __all__ = ["create_app", "run_job", "delete_expired_raw_items"]
+
+log = logging.getLogger(__name__)
+
+
+def _run_in_background(conn_factory, source: str) -> None:
+    """job을 별도 스레드에서 실행 — 이벤트 루프/HTTP 요청을 막지 않는다.
+
+    진행 상황은 crawl_runs(/status)로 확인한다.
+    """
+    conn = conn_factory()
+    try:
+        stats = run_job(conn, source)
+        conn.commit()
+        log.info("background job %s finished: %s", source, stats)
+    except Exception:
+        conn.rollback()
+        log.exception("background job %s failed", source)
+    finally:
+        conn.close()
 
 
 def _authorized(request: Request) -> bool:
@@ -28,13 +50,12 @@ def create_app(conn_factory) -> FastAPI:
                  "valid": sorted(VALID_SOURCES)},
                 status_code=400,
             )
-        conn = conn_factory()
-        try:
-            stats = run_job(conn, source)
-            conn.commit()
-            return {"ok": True, "source": source, "stats": stats}
-        finally:
-            conn.close()
+        # 즉시 응답 — job은 백그라운드 스레드에서 실행 (enrich는 수십 분 소요 가능)
+        threading.Thread(
+            target=_run_in_background, args=(conn_factory, source), daemon=True, name=f"job-{source}"
+        ).start()
+        return {"ok": True, "source": source, "started": True,
+                "note": "진행 상황은 GET /status (crawl_runs)로 확인"}
 
     @app.get("/status")
     async def status(request: Request):
