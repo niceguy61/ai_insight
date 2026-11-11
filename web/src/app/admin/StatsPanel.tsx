@@ -37,20 +37,22 @@ export default function StatsPanel({ token }: { token: string }) {
 
   const pct = stats.eligible > 0 ? Math.round((stats.summarized / stats.eligible) * 100) : 0;
 
+  const cards = [
+    { label: "엔트리", value: stats.entries.toLocaleString(), cls: "" },
+    { label: "요약 대상", value: stats.eligible.toLocaleString(), cls: "" },
+    { label: "요약 완료", value: `${stats.summarized.toLocaleString()} (${pct}%)`, cls: "rise" },
+    { label: "요약 대기", value: stats.pending.toLocaleString(), cls: "warn" },
+    { label: "스타 스냅샷", value: stats.snapshots.toLocaleString(), cls: "" },
+    { label: "README 캐시", value: stats.rawItems.toLocaleString(), cls: "" },
+    { label: "LLM 캐시", value: stats.llmCache.toLocaleString(), cls: "" },
+  ];
+
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, margin: "16px 0 8px" }}>
-      {[
-        { label: "엔트리", value: stats.entries.toLocaleString() },
-        { label: "요약 대상", value: stats.eligible.toLocaleString() },
-        { label: "요약 완료", value: `${stats.summarized.toLocaleString()} (${pct}%)` },
-        { label: "요약 대기", value: stats.pending.toLocaleString() },
-        { label: "스타 스냅샷", value: stats.snapshots.toLocaleString() },
-        { label: "README 캐시", value: stats.rawItems.toLocaleString() },
-        { label: "LLM 캐시", value: stats.llmCache.toLocaleString() },
-      ].map((s) => (
-        <div key={s.label} style={{ border: "1px solid #21262d", borderRadius: 8, padding: "10px 12px", background: "#161b22" }}>
-          <div style={{ fontSize: 11, color: "#8b949e" }}>{s.label}</div>
-          <div style={{ fontSize: 18, fontWeight: 700 }}>{s.value}</div>
+    <div className="statgrid">
+      {cards.map((s) => (
+        <div className="statcard" key={s.label}>
+          <div className="label">{s.label}</div>
+          <div className={`value ${s.cls}`}>{s.value}</div>
         </div>
       ))}
     </div>

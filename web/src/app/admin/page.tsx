@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import AdminTokenGate, { useAdminToken } from "../../components/AdminTokenGate";
 import StatsPanel from "./StatsPanel";
+import SyncTimes from "./SyncTimes";
 import RunButtons from "./RunButtons";
 
 interface CrawlRun {
@@ -17,8 +18,9 @@ interface CrawlRun {
 }
 
 function statusBadge(status: string): string {
-  if (status === "ok") return "badge up";
-  if (status === "error") return "badge pending";
+  if (status === "ok") return "badge ok";
+  if (status === "error") return "badge error";
+  if (status === "running") return "badge pending";
   return "badge";
 }
 
@@ -54,9 +56,10 @@ export default function AdminPage() {
         <h1 style={{ fontSize: 20, margin: "18px 0 8px" }}>수집 관리</h1>
         <StatsPanel token={token} />
         <RunButtons token={token} onDone={load} />
+        <SyncTimes token={token} />
 
         <section className="section" style={{ marginTop: 24 }}>
-          <h2 style={{ fontSize: 15, color: "#8b949e" }}>최근 수집 실행 (20건)</h2>
+          <h2 style={{ fontSize: 15, color: "#939cad" }}>최근 수집 실행 (20건)</h2>
           {dbError ? (
             <p className="empty">실행 이력 조회 실패: {dbError}</p>
           ) : !runs ? (
@@ -64,30 +67,24 @@ export default function AdminPage() {
           ) : runs.length === 0 ? (
             <p className="empty">아직 실행 이력이 없습니다.</p>
           ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <table className="datatable">
               <thead>
-                <tr style={{ color: "#8b949e", textAlign: "left" }}>
-                  <th style={{ padding: "6px 8px" }}>소스</th>
-                  <th style={{ padding: "6px 8px" }}>상태</th>
-                  <th style={{ padding: "6px 8px" }}>시작</th>
-                  <th style={{ padding: "6px 8px" }}>종료</th>
-                  <th style={{ padding: "6px 8px" }}>결과</th>
+                <tr>
+                  <th>소스</th>
+                  <th>상태</th>
+                  <th>시작</th>
+                  <th>종료</th>
+                  <th>결과</th>
                 </tr>
               </thead>
               <tbody>
                 {runs.map((r) => (
-                  <tr key={r.id} style={{ borderTop: "1px solid #21262d" }}>
-                    <td style={{ padding: "6px 8px" }}>{r.source}</td>
-                    <td style={{ padding: "6px 8px" }}>
-                      <span className={statusBadge(r.status)}>{r.status}</span>
-                    </td>
-                    <td style={{ padding: "6px 8px" }}>{new Date(r.started_at).toLocaleString("ko-KR")}</td>
-                    <td style={{ padding: "6px 8px" }}>
-                      {r.finished_at ? new Date(r.finished_at).toLocaleString("ko-KR") : "-"}
-                    </td>
-                    <td style={{ padding: "6px 8px", color: "#8b949e" }}>
-                      {r.error ?? JSON.stringify(r.stats)}
-                    </td>
+                  <tr key={r.id}>
+                    <td>{r.source}</td>
+                    <td><span className={statusBadge(r.status)}>{r.status}</span></td>
+                    <td>{new Date(r.started_at).toLocaleString("ko-KR")}</td>
+                    <td>{r.finished_at ? new Date(r.finished_at).toLocaleString("ko-KR") : "-"}</td>
+                    <td style={{ color: "#939cad" }}>{r.error ?? JSON.stringify(r.stats)}</td>
                   </tr>
                 ))}
               </tbody>
