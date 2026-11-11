@@ -50,6 +50,24 @@ def create_app(conn_factory) -> FastAPI:
                  "valid": sorted(VALID_SOURCES)},
                 status_code=400,
             )
+        # 중복 실행 가드 — enrich는 장시간 job이라 동시 실행 시 LLM 429/타임아웃 폭주
+        if source == "enrich":
+            probe = conn_factory()
+            try:
+                busy = probe.execute(
+                    """
+                    SELECT 1 FROM crawl_runs
+                    WHERE source='enrich' AND status='running' AND started_at > now() - interval '3 hours'
+                    LIMIT 1
+                    """
+                ).fetchone()
+            finally:
+                probe.close()
+            if busy:
+                return JSONResponse(
+                    {"ok": False, "error": "enrich가 이미 실행 중입니다 — 진행 상황은 실행 기록(/status)에서 확인"},
+                    status_code=409,
+                )
         # 즉시 응답 — job은 백그라운드 스레드에서 실행 (enrich는 수십 분 소요 가능)
         threading.Thread(
             target=_run_in_background, args=(conn_factory, source), daemon=True, name=f"job-{source}"
