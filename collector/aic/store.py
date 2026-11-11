@@ -152,7 +152,7 @@ def insert_metric_snapshot(
     )
 
 
-def insert_raw_item(conn: Connection, item: RawItem, ttl_days: int = 30) -> None:
+def insert_raw_item(conn: Connection, item: RawItem, ttl_days: int = 7) -> None:
     expires = datetime.now(timezone.utc) + timedelta(days=ttl_days)
     conn.execute(
         "INSERT INTO raw_items (source, external_id, payload, expires_at) VALUES (%s,%s,%s,%s)",
