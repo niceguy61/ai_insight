@@ -57,40 +57,12 @@ export default function AdminPage() {
         <StatsPanel token={token} />
         <RunButtons token={token} onDone={load} />
         <SyncTimes token={token} />
+        <div style={{ marginTop: 10 }}>
+          <a href="/admin/logs" style={{ fontSize: 13, color: "#6c8cff" }}>
+            실행 로그 전체 보기
+          </a>
+        </div>
 
-        <section className="section" style={{ marginTop: 24 }}>
-          <h2 style={{ fontSize: 15, color: "#939cad" }}>최근 수집 실행 (20건)</h2>
-          {dbError ? (
-            <p className="empty">실행 이력 조회 실패: {dbError}</p>
-          ) : !runs ? (
-            <p className="empty">불러오는 중…</p>
-          ) : runs.length === 0 ? (
-            <p className="empty">아직 실행 이력이 없습니다.</p>
-          ) : (
-            <table className="datatable">
-              <thead>
-                <tr>
-                  <th>소스</th>
-                  <th>상태</th>
-                  <th>시작</th>
-                  <th>종료</th>
-                  <th>결과</th>
-                </tr>
-              </thead>
-              <tbody>
-                {runs.map((r) => (
-                  <tr key={r.id}>
-                    <td>{r.source}</td>
-                    <td><span className={statusBadge(r.status)}>{r.status}</span></td>
-                    <td>{new Date(r.started_at).toLocaleString("ko-KR")}</td>
-                    <td>{r.finished_at ? new Date(r.finished_at).toLocaleString("ko-KR") : "-"}</td>
-                    <td style={{ color: "#939cad" }}>{r.error ?? JSON.stringify(r.stats)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </section>
       </div>
     </AdminTokenGate>
   );
