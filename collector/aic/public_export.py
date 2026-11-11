@@ -46,8 +46,9 @@ SLIM_COLS = (
 
 
 def _rows(conn, sql) -> list[dict]:
-    cols = [d[0] for d in conn.description]
-    return [dict(zip(cols, r)) for r in conn.execute(sql).fetchall()]
+    cur = conn.execute(sql)
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, r)) for r in cur.fetchall()]
 
 
 def slim(row: dict, spark: list[int], momentum: int) -> dict:
@@ -117,7 +118,7 @@ def build(out_dir: Path) -> dict:
         }
         for r in idx
     ]
-    (out / "search" / "index.json").mkdir(parents=True, exist_ok=True)
+    (out / "search").mkdir(parents=True, exist_ok=True)
     (out / "search" / "index.json").write_text(
         json.dumps(index, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
     )
@@ -176,7 +177,7 @@ def build(out_dir: Path) -> dict:
 
     # 4) 아카이브 (스냅샷 존재 날짜 × 그날 랭킹 상위 100)
     dates = [str(r[0]) for r in conn.execute(
-        "SELECT DISTINCT captured_at::date FROM metric_snapshots"
+        "SELECT DISTINCT captured_at::date AS day FROM metric_snapshots"
         " WHERE metrics ? 'stars' ORDER BY day DESC LIMIT 60"
     ).fetchall()]
     manifest["archiveDates"] = dates

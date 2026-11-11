@@ -21,3 +21,6 @@ Thumbs.db
 
 # TS build info
 tsconfig.tsbuildinfo
+
+# generated public data (regenerable via run_export.py)
+web/public/data/

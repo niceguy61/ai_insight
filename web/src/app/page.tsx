@@ -1,98 +1,75 @@
-import Link from "next/link";
-import EntryCard from "../components/EntryCard";
-import {
-  rankingEntries,
-  starHistoryBatch,
-  momentumDays,
-  type Entry,
-  type Ranking,
-} from "../db/queries";
-import { CATEGORIES, KINDS, RANK_TABS } from "../lib/taxonomy";
+"use client";
 
-export const dynamic = "force-dynamic";
+import { useEffect, useMemo, useState } from "react";
+import EntryCard from "../components/EntryCard";
+import { fetchManifest, fetchRank, filterRows } from "../lib/catalog";
+import type { Manifest, SlimEntry } from "../lib/format";
+import { CATEGORIES, KINDS, RANK_TABS } from "../lib/taxonomy";
 
 const PAGE_SIZE = 50;
 
-type SP = Record<string, string | string[] | undefined>;
+export default function Home() {
+  const [tab, setTab] = useState("stars");
+  const [kind, setKind] = useState<string | undefined>();
+  const [category, setCategory] = useState<string | undefined>();
+  const [page, setPage] = useState(1);
+  const [manifest, setManifest] = useState<Manifest | null>(null);
+  const [rows, setRows] = useState<SlimEntry[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-function pick(sp: SP, key: string): string | undefined {
-  const v = sp[key];
-  return typeof v === "string" && v.trim() ? v.trim() : undefined;
-}
+  useEffect(() => {
+    fetchManifest().then(setManifest).catch(() => setError("데이터를 불러올 수 없습니다 — 배치가 아직 실행되지 않았을 수 있습니다."));
+  }, []);
 
-function href(tab: string, kind?: string, category?: string, page?: number): string {
-  const p = new URLSearchParams();
-  if (tab && tab !== "stars") p.set("tab", tab);
-  if (kind) p.set("kind", kind);
-  if (category) p.set("category", category);
-  if (page && page > 1) p.set("page", String(page));
-  const qs = p.toString();
-  return qs ? `/?${qs}` : "/";
-}
+  useEffect(() => {
+    setRows(null);
+    fetchRank(tab).then(setRows).catch(() => setError("랭킹 데이터 로드 실패"));
+  }, [tab]);
 
-export default async function Home({ searchParams }: { searchParams: Promise<SP> }) {
-  const sp = await searchParams;
-  const rawTab = pick(sp, "tab") ?? "stars";
-  const tab: Ranking = (RANK_TABS.some((t) => t.key === rawTab) ? rawTab : "stars") as Ranking;
-  const kind = pick(sp, "kind");
-  const category = pick(sp, "category");
-  const page = Math.max(1, Number(pick(sp, "page") ?? "1") || 1);
+  const filtered = useMemo(() => {
+    let r = rows ?? [];
+    if (kind) r = r.filter((e) => e.k === kind);
+    if (category) r = r.filter((e) => e.cat === category);
+    return r;
+  }, [rows, kind, category]);
+
+  const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const activeTab = RANK_TABS.find((t) => t.key === tab)!;
-
-  let items: Entry[] = [];
-  let error: string | null = null;
-  let history = new Map<string, { time: string; value: number }[]>();
-  let momentum = new Map<string, number>();
-  try {
-    items = await rankingEntries(tab, PAGE_SIZE, undefined, kind, category, (page - 1) * PAGE_SIZE);
-    history = await starHistoryBatch(items.map((e) => e.id), 14);
-    for (const [id, series] of history) {
-      const m = momentumDays(series);
-      if (m >= 2) momentum.set(id, m);
-    }
-  } catch {
-    error = "데이터베이스에 연결할 수 없습니다. docker compose up -d 후 새로고침하세요.";
-  }
 
   return (
     <div>
       <form className="searchline" action="/search">
-        <input
-          type="search"
-          name="q"
-          placeholder="이름·요약·태그로 검색 — 예: notion, 데이터베이스, 브라우저"
-          aria-label="검색어"
-        />
+        <input type="search" name="q" placeholder="이름·요약·태그로 검색 — 예: notion, 데이터베이스, 브라우저" aria-label="검색어" />
         <button type="submit">검색</button>
       </form>
 
       <nav className="ranktabs" aria-label="랭킹 기준">
         {RANK_TABS.map((t) => (
-          <Link key={t.key} href={href(t.key, kind, category)} className={t.key === tab ? "on" : ""}>
+          <button key={t.key} type="button" className={t.key === tab ? "on" : ""}
+                  onClick={() => { setTab(t.key); setPage(1); }}>
             {t.label}
-          </Link>
+          </button>
         ))}
       </nav>
 
       <nav className="kinds" aria-label="종류">
-        <Link href={href(tab, undefined, category)} className={!kind ? "on" : ""}>
-          전체
-        </Link>
+        <button type="button" className={!kind ? "on" : ""} onClick={() => { setKind(undefined); setPage(1); }}>전체</button>
         {KINDS.map((k) => (
-          <Link key={k.value} href={href(tab, k.value, category)} className={kind === k.value ? "on" : ""}>
+          <button key={k.value} type="button" className={kind === k.value ? "on" : ""}
+                  onClick={() => { setKind(k.value); setPage(1); }}>
             {k.label}
-          </Link>
+          </button>
         ))}
       </nav>
 
       <nav className="cats" aria-label="카테고리">
-        <Link href={href(tab, kind, undefined)} className={!category ? "on" : ""}>
-          모든 테마
-        </Link>
+        <button type="button" className={!category ? "on" : ""} onClick={() => { setCategory(undefined); setPage(1); }}>모든 테마</button>
         {CATEGORIES.map((c) => (
-          <Link key={c} href={href(tab, kind, c)} className={category === c ? "on" : ""}>
+          <button key={c} type="button" className={category === c ? "on" : ""}
+                  onClick={() => { setCategory(c); setPage(1); }}>
             {c}
-          </Link>
+          </button>
         ))}
       </nav>
 
@@ -100,41 +77,31 @@ export default async function Home({ searchParams }: { searchParams: Promise<SP>
         {activeTab.desc}
         {kind ? ` · ${KINDS.find((k) => k.value === kind)?.label}` : ""}
         {category ? ` · ${category}` : ""}
-        {items.length > 0 ? ` · ${PAGE_SIZE}개/페이지 · ${page}페이지` : ""}
+        {filtered.length > 0 ? ` · ${filtered.length.toLocaleString()}개` : ""}
       </p>
 
       {error ? (
         <p className="empty">{error}</p>
-      ) : items.length === 0 ? (
-        <p className="empty">
-          이 조합의 데이터가 아직 없습니다 — 다른 테마·종류로 보거나, 수집이 더 진행되면 채워집니다.
-        </p>
+      ) : !rows ? (
+        <p className="empty">불러오는 중…</p>
+      ) : pageRows.length === 0 ? (
+        <p className="empty">이 조합의 데이터가 아직 없습니다.</p>
       ) : (
         <>
           <div className="ledger">
-            {items.map((e, i) => (
-              <EntryCard
-                key={e.id}
-                entry={e}
-                rank={(page - 1) * PAGE_SIZE + i + 1}
-                spark={history.get(e.id) ?? []}
-                momentum={momentum.get(e.id)}
-              />
+            {pageRows.map((e, i) => (
+              <EntryCard key={e.slug} entry={e} rank={(page - 1) * PAGE_SIZE + i + 1} />
             ))}
           </div>
           <nav className="pager" aria-label="페이지">
             {page > 1 ? (
-              <Link className="pgbtn" href={href(tab, kind, category, page - 1)}>
-                ← 이전
-              </Link>
+              <button type="button" className="pgbtn" onClick={() => setPage(page - 1)}>← 이전</button>
             ) : (
               <span className="pgbtn off">← 이전</span>
             )}
-            <span className="pgnum">{page}페이지</span>
-            {items.length === PAGE_SIZE ? (
-              <Link className="pgbtn" href={href(tab, kind, category, page + 1)}>
-                다음 →
-              </Link>
+            <span className="pgnum">{page} / {totalPages}페이지</span>
+            {page < totalPages ? (
+              <button type="button" className="pgbtn" onClick={() => setPage(page + 1)}>다음 →</button>
             ) : (
               <span className="pgbtn off">다음 →</span>
             )}
