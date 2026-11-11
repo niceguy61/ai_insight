@@ -124,14 +124,16 @@ def push_data(repo_path: Path) -> None:
     build(data_dir)
     if not (repo_path / ".git").exists():
         raise RuntimeError("pages repo가 없습니다 — init_pages_repo.py를 먼저 실행하세요")
-    _git(repo_path, "add", "data")
-    diff = _git(repo_path, "status", "--porcelain", "data")
+    # 사이트 소스도 함께 동기화 — 배포 버튼 = 현재 상태(데이터+소스) 전부 반영
+    _sync_site(repo_path)
+    _git(repo_path, "add", "data", "site")
+    diff = _git(repo_path, "status", "--porcelain", "data site")
     if not diff:
         print("[push] 변경 없음 — 스킵")
         return
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     _git(repo_path, "-c", "user.name=ai-insight-bot", "-c", "user.email=bot@local",
-         "commit", "-m", f"data: {stamp}")
+         "commit", "-m", f"deploy: {stamp}")
     _git(repo_path, "push")
     print("[push] 완료 — Actions 빌드·배포 진행 (1-2분)")
 
