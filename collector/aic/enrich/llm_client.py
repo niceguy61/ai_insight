@@ -122,7 +122,7 @@ def chat_json(
     user: str,
     *,
     client: OpenAI | None = None,
-    timeout: float = 60.0,
+    timeout: float = 180.0,
 ) -> dict:
     """chat.completions 1회 호출 후 첫 JSON 객체 추출. 실패 시 LlmError.
 
@@ -130,10 +130,13 @@ def chat_json(
     미지원으로 거부하면 extra_body 없이 1회 재시도한다.
     429(rate limit)는 2/5/10초 백오프로 같은 요청을 재시도한다.
     모든 실패는 LlmError로 변환 — 한 항목의 실패가 배치 전체를 죽이지 않게.
+
+    timeout 180초 — README 20KB 프롬프트의 요약 생성이 100초+ 걸릴 수 있음(실측).
+    max_retries=0 — 타임아웃 SDK 블라인드 재시작은 낭비(429는 자체 백오프에서 처리).
     """
     if client is None:
         client = OpenAI(base_url=s.base_url, api_key=s.api_key or "missing",
-                        timeout=timeout, max_retries=1)
+                        timeout=timeout, max_retries=0)
     kwargs: dict = {
         "model": s.model,
         "messages": [
