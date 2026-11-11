@@ -106,7 +106,10 @@ def init(repo_path: Path, owner_repo: str) -> None:
     _git(repo_path, "-c", "user.name=ai-insight-bot", "-c", "user.email=bot@local",
          "commit", "-m", "init: site + data", "--allow-empty")
     remote = f"https://x-access-token:{_token()}@github.com/{owner_repo}.git"
-    _git(repo_path, "remote", "add", "origin", remote)
+    try:
+        _git(repo_path, "remote", "add", "origin", remote)
+    except RuntimeError:
+        _git(repo_path, "remote", "set-url", "origin", remote)
     try:
         _git(repo_path, "push", "-u", "origin", "main")
     except RuntimeError:

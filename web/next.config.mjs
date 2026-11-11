@@ -1,4 +1,1 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {};
-
-export default nextConfig;
+/** @type {import('next').NextConfig} */ const isPages = process.env.PAGES_BUILD === "1"; const basePath = isPages ? "/ai-parts" : "";  const nextConfig = {   ...(isPages     ? {         output: "export",         basePath,         assetPrefix: basePath,         images: { unoptimized: true },         env: { NEXT_PUBLIC_BASE_PATH: basePath },       }     : {}), };  export default nextConfig;
