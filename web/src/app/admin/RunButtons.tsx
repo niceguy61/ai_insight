@@ -54,8 +54,13 @@ export default function RunButtons({ token, onDone }: { token: string; onDone?: 
         headers: { "X-Admin-Token": token },
       });
       const body = await res.json().catch(() => ({}));
+      const out: string = body.output ?? "";
       if (res.ok && body.ok) {
-        setMessage(`🚀 배포 완료 — GitHub Pages가 갱신 중입니다 (1-2분)\n${body.output ?? ""}`);
+        if (out.includes("변경 없음")) {
+          setMessage("✅ 이미 최신입니다 — 새로 반영할 변경이 없습니다. (사이트는 현재 상태 그대로)");
+        } else {
+          setMessage("🚀 배포 완료 — 1~2분 후 사이트 갱신. 푸터의 '데이터 기준' 시각으로 확인하세요.");
+        }
       } else {
         setMessage(`❌ 배포 실패: ${body.error ?? `HTTP ${res.status}`}`);
       }
