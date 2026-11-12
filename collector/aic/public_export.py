@@ -32,6 +32,7 @@ from aic.db import connect  # noqa: E402
 TABS = {
     "stars": "stars > 0 AND github_pushed_at > now() - interval '180 days'",
     "trending": "true",
+    "velocity": "stars_delta_7d IS NOT NULL AND stars_delta_7d > 0",
     "new": "github_created_at > now() - interval '90 days'",
     "recent": "stars > 0",
     "installs": "true",
@@ -39,11 +40,17 @@ TABS = {
 ORDER = {
     "stars": "stars DESC",
     "trending": "stars_delta_7d DESC NULLS LAST, stars DESC",
+    # 성장 속도 — 7일 전 대비 성장률: d7 / sqrt(7일 전 별수 + 1)
+    # 0→1000 ≈ 1000점, 1000→10000 ≈ 285점, 100k→102k ≈ 6점 (급등 리포가 위로)
+    "velocity": (
+        "(stars_delta_7d::numeric / sqrt(GREATEST(stars - stars_delta_7d, 0) + 1)) DESC"
+    ),
     "new": "stars_delta_7d DESC NULLS LAST, stars DESC",
     "recent": "github_created_at DESC NULLS LAST, stars DESC",
     "installs": "installs DESC NULLS LAST, stars DESC",
 }
-LIMITS = {"trending": 2000, "new": 2000, "recent": 2000, "installs": 2000, "stars": 5000}
+LIMITS = {"trending": 2000, "velocity": 2000, "new": 2000, "recent": 2000,
+          "installs": 2000, "stars": 5000}
 
 SLIM_COLS = (
     "id, kind, slug, canonical_name, summary_short_ko, stars,"
@@ -72,6 +79,10 @@ def _write_if_changed(path: Path, text: str) -> bool:
 
 
 def slim(row: dict, spark: list[int], momentum: int) -> dict:
+    d7 = row["stars_delta_7d"] or 0
+    base = max((row["stars"] or 0) - d7, 0)
+    # 7일 전 대비 성장률(%) — 성장 속도 탭 표시용
+    vl = round(100 * d7 / base, 1) if base > 0 else None
     return {
         "slug": row["slug"],
         "n": row["canonical_name"],
@@ -86,6 +97,7 @@ def slim(row: dict, spark: list[int], momentum: int) -> dict:
         "sp": spark,
         "mo": momentum if momentum >= 2 else None,
         "cr": row["github_created_at"].date().isoformat() if row["github_created_at"] else None,
+        "vl": vl,
     }
 
 
