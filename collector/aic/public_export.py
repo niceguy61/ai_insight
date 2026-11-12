@@ -1,12 +1,19 @@
 """공개 데이터(Pages용 JSON) 생성기.
 
-로컬 DB → web/public/data/ 샤드:
+로컬 DB → data/ 샤드:
   manifest.json                     버전·집계·아카이브 날짜
   rank/{tab}.json                   탭별 정렬 완료 슬림 행 (클라이언트 페이징)
   search/index.json                 검색 인덱스 (이름·한줄요약·태그·테마)
-  entry/{owner}/{repo}.json         상세 전문 + 90일 스타 히스토리
+  metrics.json                      별수 지표 합본 {slug: [st, d7, d24, in, npm]} — 수집 때마다 바뀌는 유일한 큰 덩어리
+  history.json                      스타 일별 추이 합본 {slug: [[YYYYMMDD, stars], ...]} — 차트용
+  entry/{slug}.json                 상세 정적 전문 (요약·설치법·태그·출처 — 별수·히스토리 제외)
   archive/{date}.json               날짜별 그날 스냅샷 랭킹
 
+별수(stars·delta·히스토리)를 entry 파일에서 분리한 이유: 수집 때마다 11k+ 파일이
+변하면 git add/commit이 수 분씩 걸리고 repo가 폭발한다. 분리 후 배포 시 변경은
+metrics·history·rank·search 등 한 자릿수 파일로 수렴한다.
+
+모든 파일은 내용이 같으면 재작성하지 않는다(_write_if_changed — git 변경 최소화).
 모든 값은 공개 정보만 포함한다 (raw_items·DB 경로 등 비공개 데이터 제외).
 """
 import datetime as dt
@@ -51,6 +58,19 @@ def _rows(conn, sql) -> list[dict]:
     return [dict(zip(cols, r)) for r in cur.fetchall()]
 
 
+def _write_if_changed(path: Path, text: str) -> bool:
+    """동일 내용이면 스킵 — 별수 갱신 때 git 변경 파일 수를 최소화. 썼으면 True."""
+    if path.exists():
+        try:
+            if path.read_text(encoding="utf-8") == text:
+                return False
+        except OSError:
+            pass
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return True
+
+
 def slim(row: dict, spark: list[int], momentum: int) -> dict:
     return {
         "slug": row["slug"],
@@ -92,8 +112,9 @@ def build(out_dir: Path) -> dict:
         slim_rows = [
             slim(r, sparks.get(r["id"], []), momenta.get(r["id"], 0)) for r in rows
         ]
-        (out / "rank" / f"{tab}.json").write_text(
-            json.dumps(slim_rows, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+        _write_if_changed(
+            out / "rank" / f"{tab}.json",
+            json.dumps(slim_rows, ensure_ascii=False, separators=(",", ":")),
         )
         manifest["tabs"][tab] = len(slim_rows)
 
@@ -118,16 +139,31 @@ def build(out_dir: Path) -> dict:
         }
         for r in idx
     ]
-    (out / "search").mkdir(parents=True, exist_ok=True)
-    (out / "search" / "index.json").write_text(
-        json.dumps(index, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+    _write_if_changed(
+        out / "search" / "index.json",
+        json.dumps(index, ensure_ascii=False, separators=(",", ":")),
     )
 
-    # 3) 상세 전문 (등장 출처 + 90일 히스토리)
+    # 3) 별수 지표 합본 — 수집 때마다 바뀌는 유일한 큰 덩어리 (파일 1개)
+    mrows = _rows(
+        conn,
+        "SELECT slug, stars, stars_delta_7d, stars_delta_24h, installs,"
+        " npm_downloads_monthly FROM entries WHERE entry_status='active'",
+    )
+    metrics = {
+        r["slug"]: [r["stars"], r["stars_delta_7d"], r["stars_delta_24h"],
+                    r["installs"], r["npm_downloads_monthly"]]
+        for r in mrows
+    }
+    _write_if_changed(
+        out / "metrics.json",
+        json.dumps(metrics, ensure_ascii=False, separators=(",", ":")),
+    )
+
+    # 4) 상세 전문 — 정적 내용만 (별수·히스토리는 metrics/history 합본으로)
     entries = _rows(conn, "SELECT id, slug, kind, canonical_name, summary_short_ko, summary_ko,"
                           " usage_ko, install_commands, tags, category, repo_url, homepage_url,"
-                          " license, stars, stars_delta_24h, stars_delta_7d, installs,"
-                          " npm_downloads_monthly, github_created_at, github_pushed_at"
+                          " license, github_created_at, github_pushed_at"
                           " FROM entries WHERE entry_status='active'")
     apps = {}
     for a in _rows(conn, "SELECT entry_id, source, external_id, url, metrics, last_seen_at"
@@ -137,17 +173,6 @@ def build(out_dir: Path) -> dict:
              "url": a["url"], "metrics": a["metrics"]}
         )
     for e in entries:
-        hist = conn.execute(
-            """
-            SELECT DISTINCT ON (captured_at::date) captured_at::date AS day,
-                   (metrics->>'stars')::int AS stars
-            FROM metric_snapshots
-            WHERE entry_id=%s AND metrics ? 'stars'
-              AND captured_at >= now() - interval '90 days'
-            ORDER BY captured_at::date, captured_at DESC
-            """,
-            (e["id"],),
-        ).fetchall()
         detail = {
             "slug": e["slug"],
             "kind": e["kind"],
@@ -161,21 +186,45 @@ def build(out_dir: Path) -> dict:
             "repo": e["repo_url"],
             "homepage": e["homepage_url"],
             "license": e["license"],
-            "stars": e["stars"],
-            "d24": e["stars_delta_24h"],
-            "d7": e["stars_delta_7d"],
-            "installs": e["installs"],
-            "npmMonthly": e["npm_downloads_monthly"],
             "createdAt": e["github_created_at"].date().isoformat() if e["github_created_at"] else None,
             "pushedAt": e["github_pushed_at"].date().isoformat() if e["github_pushed_at"] else None,
             "appearances": apps.get(e["id"], []),
-            "history": [{"d": str(h[0]), "v": h[1]} for h in hist],
         }
-        path = out / "entry" / f"{e['slug']}.json"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(detail, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        _write_if_changed(
+            out / "entry" / f"{e['slug']}.json",
+            json.dumps(detail, ensure_ascii=False, separators=(",", ":")),
+        )
 
-    # 4) 아카이브 (스냅샷 존재 날짜 × 그날 랭킹 상위 100)
+    # 5) 스타 일별 추이 합본 (60일, 차트용) — 쿼리 1번으로 일괄 조회
+    hist_rows = conn.execute(
+        """
+        SELECT entry_id, day, stars FROM (
+            SELECT s.entry_id,
+                   s.captured_at::date AS day,
+                   (s.metrics->>'stars')::int AS stars,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY s.entry_id, s.captured_at::date
+                       ORDER BY s.captured_at DESC
+                   ) AS rn
+            FROM metric_snapshots s
+            WHERE s.metrics ? 'stars' AND s.captured_at >= now() - interval '60 days'
+        ) t
+        WHERE rn = 1
+        ORDER BY entry_id, day
+        """
+    ).fetchall()
+    slug_by_id = {e["id"]: e["slug"] for e in entries}
+    history: dict[str, list[list]] = {}
+    for eid, day, stars in hist_rows:
+        slug = slug_by_id.get(eid)
+        if slug:
+            history.setdefault(slug, []).append([int(day.strftime("%Y%m%d")), stars])
+    _write_if_changed(
+        out / "history.json",
+        json.dumps(history, ensure_ascii=False, separators=(",", ":")),
+    )
+
+    # 6) 아카이브 (스냅샷 존재 날짜 × 그날 랭킹 상위 100)
     dates = [str(r[0]) for r in conn.execute(
         "SELECT DISTINCT captured_at::date AS day FROM metric_snapshots"
         " WHERE metrics ? 'stars' ORDER BY day DESC LIMIT 60"
@@ -197,8 +246,9 @@ def build(out_dir: Path) -> dict:
         ids = [r["id"] for r in rows]
         sparks, momenta = _spark_batch(conn, ids)
         slim_rows = [slim(r, sparks.get(r["id"], []), momenta.get(r["id"], 0)) for r in rows]
-        (out / "archive" / f"{day}.json").write_text(
-            json.dumps(slim_rows, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+        _write_if_changed(
+            out / "archive" / f"{day}.json",
+            json.dumps(slim_rows, ensure_ascii=False, separators=(",", ":")),
         )
 
     manifest["entries"] = len(entries)
@@ -206,7 +256,7 @@ def build(out_dir: Path) -> dict:
         json.dumps(manifest, ensure_ascii=False, indent=1), encoding="utf-8"
     )
 
-    # 5) 아카이브 프루닝 — 90일 지난 스냅샷 파일 삭제 (보존 정책)
+    # 7) 아카이브 프루닝 — 90일 지난 스냅샷 파일 삭제 (보존 정책)
     cutoff = (now - dt.timedelta(days=90)).strftime("%Y-%m-%d")
     for f in (out / "archive").glob("*.json"):
         if f.stem < cutoff:
