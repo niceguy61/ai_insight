@@ -32,7 +32,7 @@ from aic.db import connect  # noqa: E402
 TABS = {
     "stars": "stars > 0 AND github_pushed_at > now() - interval '180 days'",
     "trending": "true",
-    "velocity": "stars_delta_7d IS NOT NULL AND stars_delta_7d > 0",
+    "velocity": "GREATEST(COALESCE(stars_delta_7d, 0), COALESCE(stars_delta_24h, 0)) > 0",
     "new": "github_created_at > now() - interval '90 days'",
     "recent": "stars > 0",
     "installs": "true",
@@ -40,10 +40,13 @@ TABS = {
 ORDER = {
     "stars": "stars DESC",
     "trending": "stars_delta_7d DESC NULLS LAST, stars DESC",
-    # 성장 속도 — 7일 전 대비 성장률: d7 / sqrt(7일 전 별수 + 1)
-    # 0→1000 ≈ 1000점, 1000→10000 ≈ 285점, 100k→102k ≈ 6점 (급등 리포가 위로)
+    # 성장 속도 — 일일 성장률: max(d7/7, d24) / sqrt(시작 별수 + 1)
+    # d7 없어도 d24로 판정 (신규 발견 리포가 즉시 대상에 들어옴)
+    # 0→1000/1일 ≈ 1000점, 1000→10000/7일 ≈ 41점, 100k→102k/7일 ≈ 0.9점
     "velocity": (
-        "(stars_delta_7d::numeric / sqrt(GREATEST(stars - stars_delta_7d, 0) + 1)) DESC"
+        "(GREATEST(COALESCE(stars_delta_7d, 0)::numeric / 7,"
+        "           COALESCE(stars_delta_24h, 0)::numeric)"
+        " / sqrt(GREATEST(stars - COALESCE(stars_delta_7d, stars_delta_24h, stars), 0) + 1)) DESC"
     ),
     "new": "stars_delta_7d DESC NULLS LAST, stars DESC",
     "recent": "github_created_at DESC NULLS LAST, stars DESC",
@@ -80,9 +83,15 @@ def _write_if_changed(path: Path, text: str) -> bool:
 
 def slim(row: dict, spark: list[int], momentum: int) -> dict:
     d7 = row["stars_delta_7d"] or 0
-    base = max((row["stars"] or 0) - d7, 0)
-    # 7일 전 대비 성장률(%) — 성장 속도 탭 표시용
-    vl = round(100 * d7 / base, 1) if base > 0 else None
+    d24 = row["stars_delta_24h"] or 0
+    # 성장률(%) — d7 우선, 없으면 d24 기준 (신규 리포 즉시 표시)
+    if d7 > 0:
+        base = max((row["stars"] or 0) - d7, 0)
+    elif d24 > 0:
+        base = max((row["stars"] or 0) - d24, 0)
+    else:
+        base = 0
+    vl = round(100 * (d7 or d24) / base, 1) if base > 0 else None
     return {
         "slug": row["slug"],
         "n": row["canonical_name"],
