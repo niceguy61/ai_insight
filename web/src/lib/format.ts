@@ -33,7 +33,6 @@ export interface EntryDetail {
   homepage: string | null;
   license: string | null;
   createdAt: string | null;
-  pushedAt: string | null;
   appearances: { source: string; external_id: string; url: string | null;
                  metrics: Record<string, unknown> | null }[];
 }

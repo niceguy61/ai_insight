@@ -25,6 +25,18 @@ _ENTRY_UPDATABLE = """
         github_pushed_at  = COALESCE(%(github_pushed_at)s, github_pushed_at),
         last_crawled_at   = now()
     WHERE id = %(entry_id)s
+      AND (
+          -- 내용 변화가 없으면 갱신 자체를 스킵 (row 재작성·export churn 방지)
+          canonical_name IS DISTINCT FROM COALESCE(%(canonical_name)s, canonical_name)
+          OR repo_url IS DISTINCT FROM COALESCE(%(repo_url)s, repo_url)
+          OR homepage_url IS DISTINCT FROM COALESCE(%(homepage_url)s, homepage_url)
+          OR license IS DISTINCT FROM COALESCE(%(license)s, license)
+          OR stars IS DISTINCT FROM COALESCE(%(stars)s, stars)
+          OR installs IS DISTINCT FROM GREATEST(COALESCE(%(installs)s, installs), installs)
+          OR npm_downloads_monthly IS DISTINCT FROM COALESCE(%(npm_downloads_monthly)s, npm_downloads_monthly)
+          OR github_created_at IS DISTINCT FROM COALESCE(%(github_created_at)s, github_created_at)
+          OR github_pushed_at IS DISTINCT FROM COALESCE(%(github_pushed_at)s, github_pushed_at)
+      )
 """
 
 

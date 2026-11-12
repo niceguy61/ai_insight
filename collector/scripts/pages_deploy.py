@@ -127,7 +127,7 @@ def push_data(repo_path: Path) -> None:
     # 사이트 소스도 함께 동기화 — 배포 버튼 = 현재 상태(데이터+소스) 전부 반영
     _sync_site(repo_path)
     _git(repo_path, "add", "data", "site")
-    diff = _git(repo_path, "status", "--porcelain", "data site")
+    diff = _git(repo_path, "status", "--porcelain", "data", "site")
     if not diff:
         print("[push] 변경 없음 — 스킵")
         return

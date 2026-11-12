@@ -160,10 +160,11 @@ def build(out_dir: Path) -> dict:
         json.dumps(metrics, ensure_ascii=False, separators=(",", ":")),
     )
 
-    # 4) 상세 전문 — 정적 내용만 (별수·히스토리는 metrics/history 합본으로)
+    # 4) 상세 전문 — 정적 내용만 (별수·히스토리는 metrics/history 합본으로).
+    #    pushedAt 제외: 마지막 push 시각은 수집마다 바뀌어 정적 파일을 건드리는 주범.
     entries = _rows(conn, "SELECT id, slug, kind, canonical_name, summary_short_ko, summary_ko,"
                           " usage_ko, install_commands, tags, category, repo_url, homepage_url,"
-                          " license, github_created_at, github_pushed_at"
+                          " license, github_created_at"
                           " FROM entries WHERE entry_status='active'")
     apps = {}
     for a in _rows(conn, "SELECT entry_id, source, external_id, url, metrics, last_seen_at"
@@ -187,7 +188,6 @@ def build(out_dir: Path) -> dict:
             "homepage": e["homepage_url"],
             "license": e["license"],
             "createdAt": e["github_created_at"].date().isoformat() if e["github_created_at"] else None,
-            "pushedAt": e["github_pushed_at"].date().isoformat() if e["github_pushed_at"] else None,
             "appearances": apps.get(e["id"], []),
         }
         _write_if_changed(
