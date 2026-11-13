@@ -8,7 +8,7 @@ import uvicorn
 from aic.config import load_config
 from aic.control_api import create_app
 from aic.db import connect, migrate
-from aic.scheduler import build_scheduler
+from aic.scheduler import build_scheduler, start_enrich_worker
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -40,7 +40,8 @@ def main() -> None:
 
     sched = build_scheduler(conn_factory)
     sched.start()
-    logging.info("scheduler started (github/snapshots 6h, skills 12h, registry/npm 24h)")
+    start_enrich_worker(conn_factory)
+    logging.info("scheduler started (github/snapshots 6h, skills 12h, registry/npm 24h) + enrich worker")
 
     app = create_app(conn_factory)
     uvicorn.run(app, host=HOST, port=PORT, log_level="info")
