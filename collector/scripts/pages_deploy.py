@@ -13,6 +13,7 @@ import json
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -36,10 +37,18 @@ def _token() -> str:
 
 
 def _git(repo: Path, *args: str) -> str:
-    r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
-    if r.returncode != 0:
-        raise RuntimeError(f"git {' '.join(args)} 실패: {r.stderr.strip()[:300]}")
-    return r.stdout.strip()
+    """git 실행. index.lock 충돌(VSCode 등 폴링 경합)은 잠시 대기 후 재시도한다."""
+    last_err = ""
+    for attempt in range(8):
+        r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+        if r.returncode == 0:
+            return r.stdout.strip()
+        last_err = r.stderr.strip()[:300]
+        if "index.lock" in last_err and attempt < 7:
+            time.sleep(3)
+            continue
+        raise RuntimeError(f"git {' '.join(args)} 실패: {last_err}")
+    raise RuntimeError(f"git {' '.join(args)} 실패 (재시도 초과): {last_err}")
 
 
 def _ensure_remote_repo(owner_repo: str) -> None:
