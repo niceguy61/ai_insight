@@ -66,7 +66,7 @@ export default function AdminPage() {
         setDbError(null);
       }}
     >
-      <div>
+      <div className="container page">
         <h1 style={{ fontSize: 20, margin: "18px 0 8px" }}>수집 관리</h1>
         <StatsPanel token={token} />
         <RunButtons token={token} onDone={load} />

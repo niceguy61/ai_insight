@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import SyncTimes from "./SyncTimes";
 
 const SOURCES: { key: string; label: string }[] = [
   { key: "github", label: "GitHub" },

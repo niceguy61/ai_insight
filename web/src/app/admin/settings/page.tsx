@@ -19,7 +19,7 @@ export default function AdminSettingsPage() {
         setAuthFailed(false);
       }}
     >
-      <div>
+      <div className="container page">
         <h1 style={{ fontSize: 20, margin: "18px 0 8px" }}>LLM 설정</h1>
         <p className="summary">
           OpenAI 호환 엔드포인트라면 무엇이든 됩니다. 알려진 provider(NVIDIA NIM, OpenRouter)는
