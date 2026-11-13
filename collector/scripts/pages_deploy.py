@@ -10,6 +10,7 @@
 """
 import datetime as dt
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -128,6 +129,32 @@ def init(repo_path: Path, owner_repo: str) -> None:
 
 
 def push_data(repo_path: Path) -> None:
+    """배포 — export + 사이트 소스 동기화 + commit/push.
+
+    파일락(.deploy.lock)으로 동시 실행을 직렬화한다. 버튼과 CLI가 겹쳐도
+    build()의 동시 파일 쓰기로 JSON이 깨지는 일을 원천 차단.
+    """
+    lock = repo_path / ".deploy.lock"
+    deadline = time.time() + 900
+    while lock.exists():
+        try:
+            if time.time() - lock.stat().st_mtime > 900:
+                lock.unlink(missing_ok=True)  # 스테일 락 인수
+                break
+        except OSError:
+            break
+        if time.time() > deadline:
+            raise RuntimeError("다른 배포가 진행 중입니다 (15분 대기 초과) — 잠시 후 다시 시도하세요")
+        print("[lock] 다른 배포 대기 중...")
+        time.sleep(5)
+    lock.write_text(str(os.getpid()), encoding="utf-8")
+    try:
+        _push_data_inner(repo_path)
+    finally:
+        lock.unlink(missing_ok=True)
+
+
+def _push_data_inner(repo_path: Path) -> None:
     data_dir = repo_path / "data"
     data_dir.mkdir(exist_ok=True)
     build(data_dir)
