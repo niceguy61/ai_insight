@@ -47,7 +47,7 @@ export default function EntryCard({ entry, rank, showVelocity }:
           ) : null}
           <span className={`ktag ${entry.k}`}>{KIND_LABEL[entry.k] ?? entry.k}</span>
           <span className="name">{entry.n}</span>
-          {entry.mo && entry.mo >= 2 ? <span className="momtag">🔥 {entry.mo}일 연속</span> : null}
+          {entry.mo && entry.mo >= 2 ? <span className="momtag">{entry.mo}일 연속</span> : null}
         </span>
         {short ? (
           <span className="brief">{short}</span>
@@ -60,7 +60,7 @@ export default function EntryCard({ entry, rank, showVelocity }:
       </span>
       <span className="nums">
         <span className="stars">
-          <span className="icon">⭐</span>
+          <span className="icon"></span>
           {formatNumber(entry.st)}
         </span>
         {showVelocity && entry.vl != null ? (
@@ -68,7 +68,7 @@ export default function EntryCard({ entry, rank, showVelocity }:
         ) : entry.d7 && entry.d7 > 0 ? (
           <span className="delta">▲ {formatNumber(entry.d7)}<span className="unit">/7d</span></span>
         ) : entry.in ? (
-          <span className="installs">📥 {formatNumber(entry.in)}</span>
+          <span className="installs">{formatNumber(entry.in)}</span>
         ) : null}
       </span>
     </a>

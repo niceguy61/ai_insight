@@ -13,7 +13,7 @@ interface SavedLlm {
   model?: string;
 }
 
-export default function LlmSettingsForm({ token }: { token: string }) {
+export default function LlmSettingsForm({ token, onUnauthorized }: { token: string; onUnauthorized?: () => void }) {
   const [provider, setProvider] = useState<string>("nvidia");
   const [baseUrl, setBaseUrl] = useState(PRESETS.nvidia);
   const [apiKey, setApiKey] = useState("");
@@ -29,6 +29,10 @@ export default function LlmSettingsForm({ token }: { token: string }) {
         const res = await fetch("/api/admin/config?key=llm", {
           headers: { "X-Admin-Token": token },
         });
+        if (res.status === 401) {
+          onUnauthorized?.();
+          return;
+        }
         if (!res.ok) return;
         const body = await res.json();
         const cfg: SavedLlm = body.value ?? {};
@@ -83,10 +87,10 @@ export default function LlmSettingsForm({ token }: { token: string }) {
         }),
       });
       if (res.ok) {
-        setMessage("✅ 저장되었습니다. 다음 요약 작업부터 적용됩니다.");
+        setMessage("저장되었습니다. 다음 요약 작업부터 적용됩니다.");
       } else {
         const body = await res.json().catch(() => ({}));
-        setMessage(`❌ 저장 실패: ${body.error ?? `HTTP ${res.status}`}`);
+        setMessage(`저장 실패: ${body.error ?? `HTTP ${res.status}`}`);
       }
     } finally {
       setSaving(false);

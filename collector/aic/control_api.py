@@ -8,7 +8,7 @@ from httpx import Client
 
 from aic.config import load_config
 from aic.enrich.llm_client import get_settings, list_models  # noqa: F401
-from aic.jobs import VALID_SOURCES, delete_expired_raw_items, run_job  # noqa: F401
+from aic.jobs import VALID_SOURCES, delete_expired_raw_items, end_enrich, run_job  # noqa: F401
 
 __all__ = ["create_app", "run_job", "delete_expired_raw_items"]
 
@@ -29,6 +29,8 @@ def _run_in_background(conn_factory, source: str) -> None:
         conn.rollback()
         log.exception("background job %s failed", source)
     finally:
+        if source == "enrich":
+            end_enrich()
         conn.close()
 
 
@@ -50,22 +52,11 @@ def create_app(conn_factory) -> FastAPI:
                  "valid": sorted(VALID_SOURCES)},
                 status_code=400,
             )
-        # 중복 실행 가드 — enrich는 장시간 job이라 동시 실행 시 LLM 429/타임아웃 폭주
+        # 중복 실행 가드 — enrich는 상시 워커/수동 실행과 겹치면 429 폭주
         if source == "enrich":
-            probe = conn_factory()
-            try:
-                busy = probe.execute(
-                    """
-                    SELECT 1 FROM crawl_runs
-                    WHERE source='enrich' AND status='running' AND started_at > now() - interval '3 hours'
-                    LIMIT 1
-                    """
-                ).fetchone()
-            finally:
-                probe.close()
-            if busy:
+            if not try_begin_enrich():
                 return JSONResponse(
-                    {"ok": False, "error": "enrich가 이미 실행 중입니다 — 진행 상황은 실행 기록(/status)에서 확인"},
+                    {"ok": False, "error": "enrich가 이미 실행 중입니다 (상시 워커) — 진행 상황은 실행 기록(/status)에서 확인"},
                     status_code=409,
                 )
         # 즉시 응답 — job은 백그라운드 스레드에서 실행 (enrich는 수십 분 소요 가능)

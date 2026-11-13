@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import AdminTokenGate, { useAdminToken } from "../../components/AdminTokenGate";
+import AdminTokenGate, { clearAdminToken, useAdminToken } from "../../components/AdminTokenGate";
 import StatsPanel from "./StatsPanel";
 import SyncTimes from "./SyncTimes";
 import RunButtons from "./RunButtons";
@@ -25,9 +25,11 @@ function statusBadge(status: string): string {
 }
 
 export default function AdminPage() {
-  const { token, loaded } = useAdminToken();
+  const { token, loaded, setToken } = useAdminToken();
   const [runs, setRuns] = useState<CrawlRun[] | null>(null);
   const [dbError, setDbError] = useState<string | null>(null);
+  // 저장된 토큰이 서버에서 401로 거부된 상태 — 게이트에 "다시 입력" 탈출구를 띄우기 위한 플래그
+  const [authFailed, setAuthFailed] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -38,8 +40,10 @@ export default function AdminPage() {
       if (body.ok) {
         setRuns(body.runs);
         setDbError(null);
+        setAuthFailed(false);
       } else {
         setDbError(body.error ?? `HTTP ${res.status}`);
+        if (res.status === 401) setAuthFailed(true);
       }
     } catch {
       setDbError("runs 조회 실패");
@@ -51,7 +55,17 @@ export default function AdminPage() {
   }, [token, load]);
 
   return (
-    <AdminTokenGate token={token} loaded={loaded}>
+    <AdminTokenGate
+      token={token}
+      loaded={loaded}
+      failed={authFailed}
+      onClearToken={() => {
+        clearAdminToken();
+        setToken("");
+        setAuthFailed(false);
+        setDbError(null);
+      }}
+    >
       <div>
         <h1 style={{ fontSize: 20, margin: "18px 0 8px" }}>수집 관리</h1>
         <StatsPanel token={token} />

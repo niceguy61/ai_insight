@@ -5,7 +5,7 @@ import time
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from aic.jobs import delete_expired_raw_items, run_job
+from aic.jobs import delete_expired_raw_items, end_enrich, run_job, try_begin_enrich
 from aic.snapshots import recompute_deltas
 
 log = logging.getLogger(__name__)
@@ -21,19 +21,7 @@ def _job(conn_factory, name):
     def _run():
         conn = conn_factory()
         try:
-            if name == "enrich":
-                # 중복 가드 — 다른 enrich가 도는 중이면 이번 틱은 스킵
-                row = conn.execute(
-                    "SELECT 1 FROM crawl_runs WHERE source='enrich' AND status='running'"
-                    " AND started_at > now() - interval '3 hours' LIMIT 1"
-                ).fetchone()
-                if row:
-                    log.info("enrich skipped — 다른 enrich 실행 중")
-                    conn.rollback()
-                    return
-                stats = run_job(conn, name)
-                log.info("%s job: %s", name, stats)
-            elif name == "deltas":
+            if name == "deltas":
                 # 좀비 run 정리 — 프로세스 크래시로 'running'인 채 남은 행 표시
                 cur = conn.execute(SWEEP_STALE_RUNS)
                 if cur.rowcount:
@@ -113,12 +101,18 @@ def start_enrich_worker(conn_factory) -> None:
                     time.sleep(900)
                     continue
 
+                if not try_begin_enrich():
+                    log.info("enrich worker: enrich 락 점유 — 60초 대기")
+                    time.sleep(60)
+                    continue
+
                 log.info("enrich worker: 대기 %s건 — 배치 실행", f"{pending:,}")
                 conn = conn_factory()
                 try:
                     run_job(conn, "enrich")
                     conn.commit()
                 finally:
+                    end_enrich()
                     conn.close()
             except Exception:
                 log.exception("enrich worker 오류 — 60초 후 재시도")

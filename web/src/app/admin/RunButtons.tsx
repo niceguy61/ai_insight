@@ -32,14 +32,14 @@ export default function RunButtons({ token, onDone }: { token: string; onDone?: 
       });
       const body = await res.json().catch(() => ({}));
       if (res.ok && body.ok) {
-        setMessage(`▶ ${source}: 시작됨 — 진행 상황은 아래 실행 기록에서 확인 (자동 갱신)`);
+        setMessage(`${source}: 시작됨 — 진행 상황은 아래 실행 기록에서 확인 (자동 갱신)`);
         router.refresh();
         onDone?.();
       } else {
-        setMessage(`❌ ${source}: ${body.error ?? `HTTP ${res.status}`}`);
+        setMessage(`${source}: ${body.error ?? `HTTP ${res.status}`}`);
       }
     } catch {
-      setMessage(`❌ ${source}: 요청 실패`);
+      setMessage(`${source}: 요청 실패`);
     } finally {
       setRunning(null);
     }
@@ -57,15 +57,15 @@ export default function RunButtons({ token, onDone }: { token: string; onDone?: 
       const out: string = body.output ?? "";
       if (res.ok && body.ok) {
         if (out.includes("변경 없음")) {
-          setMessage("✅ 이미 최신입니다 — 새로 반영할 변경이 없습니다. (사이트는 현재 상태 그대로)");
+          setMessage("이미 최신입니다 — 새로 반영할 변경이 없습니다. (사이트는 현재 상태 그대로)");
         } else {
-          setMessage("🚀 배포 완료 — 1~2분 후 사이트 갱신. 푸터의 '데이터 기준' 시각으로 확인하세요.");
+          setMessage("배포 완료 — 1~2분 후 사이트 갱신. 푸터의 '데이터 기준' 시각으로 확인하세요.");
         }
       } else {
-        setMessage(`❌ 배포 실패: ${body.error ?? `HTTP ${res.status}`}`);
+        setMessage(`배포 실패: ${body.error ?? `HTTP ${res.status}`}`);
       }
     } catch {
-      setMessage("❌ 배포 요청 실패");
+      setMessage("배포 요청 실패");
     } finally {
       setRunning(null);
     }
@@ -87,7 +87,7 @@ export default function RunButtons({ token, onDone }: { token: string; onDone?: 
       </div>
       <div className="jobbtns">
         <button type="button" onClick={deploy} disabled={running !== null}>
-          {running === "deploy" ? "배포 중…" : "🚀 JSON 생성 & Pages push"}
+          {running === "deploy" ? "배포 중…" : "JSON 생성 & Pages push"}
         </button>
       </div>
       {message ? (

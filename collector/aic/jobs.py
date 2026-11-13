@@ -1,6 +1,7 @@
 """소스 수집 job의 공통 흐름: fetch → store → 스냅샷 → crawl_runs 기록."""
 import json
 import logging
+import threading
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -9,6 +10,20 @@ import httpx
 from aic.config import load_config
 
 log = logging.getLogger(__name__)
+
+# enrich 상시 워커와 관리자 수동 실행이 겹치지 않게 하는 프로세스 내 락.
+# 좀비 crawl_runs 행(프로세스 강제 종료 잔재)에 흔들리지 않는다.
+_ENRICH_LOCK = threading.Lock()
+
+
+def try_begin_enrich() -> bool:
+    """enrich 배치 시작 시도 — 이미 실행 중이면 False."""
+    return _ENRICH_LOCK.acquire(blocking=False)
+
+
+def end_enrich() -> None:
+    if _ENRICH_LOCK.locked():
+        _ENRICH_LOCK.release()
 from aic.enrich.llm_client import get_settings
 from aic.enrich.summarizer import run_enrichment
 from aic.models import RawItem
