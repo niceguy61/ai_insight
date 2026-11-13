@@ -70,8 +70,9 @@ def _run_github(conn) -> dict:
             tags=p.get("topics") or None,
         )
         insert_raw_item(conn, item)
-        if p.get("stargazers_count") is not None:
-            snapshot_rows.append((entry_id, "github", {"stars": p["stargazers_count"]}))
+        stars_now = p.get("stargazers_count")
+        if stars_now:  # 0별 스냅샷은 기록하지 않는다 — 테이블 증량 방지
+            snapshot_rows.append((entry_id, "github", {"stars": stars_now}))
     capture_snapshots(conn, snapshot_rows)
     return {"items": len(items), "snapshots": len(snapshot_rows)}
 

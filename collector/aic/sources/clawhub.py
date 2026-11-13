@@ -11,6 +11,7 @@ from aic.sources.github_source import polite_get
 
 DEFAULT_BASE_URL = "https://clawhub.ai"
 PAGE_SIZE = 100
+MAX_ITEMS = 3000  # downloads 정렬 상위 N개만 — 디렉터리 전체(85k+) 수집 방지
 
 
 class ClawhubSource(SourceAdapter):
@@ -50,6 +51,6 @@ class ClawhubSource(SourceAdapter):
                 payload["canonical_url"] = f"{self.base_url}/{owner}/skills/{slug}"
                 items.append(RawItem(source=self.source_name, external_id=ext_id, payload=payload))
             cursor = data.get("nextCursor")
-            if not cursor:
+            if not cursor or len(items) >= MAX_ITEMS:
                 break
         return items

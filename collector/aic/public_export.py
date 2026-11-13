@@ -18,6 +18,7 @@ metrics·history·rank·search 등 한 자릿수 파일로 수렴한다.
 """
 import datetime as dt
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -56,10 +57,55 @@ LIMITS = {"trending": 2000, "velocity": 2000, "new": 2000, "recent": 2000,
           "installs": 2000, "stars": 5000}
 
 SLIM_COLS = (
-    "id, kind, slug, canonical_name, summary_short_ko, stars,"
+    "id, kind, slug, LEFT(canonical_name, 100) AS canonical_name, summary_short_ko, stars,"
     " stars_delta_24h, stars_delta_7d, installs, category, tags,"
     " repo_url, homepage_url, github_created_at"
 )
+
+# 사이트에 보일 가치가 있는 엔트리 판정 — 소스별 기준:
+#   github: 별수 > 0 / 요약 존재 / skills.sh·npm: installs 100+ / ClawHub 전용: installs 3000+
+#   (ClawHub 카운트는 인플레이션 — 디렉터리 전체 수집 방지용 상위 컷)
+_KEEP_PREDICATE = """
+    COALESCE(stars, 0) > 0
+    OR summary_ko IS NOT NULL OR summary_short_ko IS NOT NULL
+    OR (COALESCE(installs, 0) >= 100 AND EXISTS (
+        SELECT 1 FROM appearances a WHERE a.entry_id = entries.id
+          AND a.source IN ('skills_sh', 'npm')))
+    OR (COALESCE(installs, 0) >= 3000 AND EXISTS (
+        SELECT 1 FROM appearances a WHERE a.entry_id = entries.id
+          AND a.source = 'clawhub'))
+"""
+
+_WINDOWS_RESERVED = {"CON", "PRN", "AUX", "NUL",
+                     *(f"COM{i}" for i in range(1, 10)),
+                     *(f"LPT{i}" for i in range(1, 10))}
+
+
+def _hash8(s: str) -> str:
+    """djb2-xor 32비트 해시 (웹 클라이언트와 동일 구현 유지)."""
+    h = 5381
+    for ch in s:
+        h = ((h * 33) ^ ord(ch)) & 0xFFFFFFFF
+    return f"{h:08x}"
+
+
+def _entry_filename(slug: str) -> str:
+    """slug → Windows 안전 파일 경로 (entry/ 소속).
+
+    - Windows 금지문자 치환, 예약어·끝문자 처리
+    - 리포명 80자 초과면 70자 절단 + 해시 8자 (MAX_PATH 260자 방어 — 트롤 리포 대응)
+    - 웹 클라이언트의 fetchEntry가 동일 규칙으로 URL을 만든다 (catalog.ts)
+    """
+    owner, sep, repo = slug.partition("/")
+    invalid = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+    repo = invalid.sub("_", repo).rstrip(" .")
+    if repo.upper() in _WINDOWS_RESERVED:
+        repo = "_" + repo
+    if len(repo) > 80:
+        repo = f"{repo[:70]}-{_hash8(repo)}"
+    if sep:
+        return f"{owner}/{repo}.json"
+    return f"{repo}.json"
 
 
 def _rows(conn, sql) -> list[dict]:
@@ -77,7 +123,10 @@ def _write_if_changed(path: Path, text: str) -> bool:
         except OSError:
             pass
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    try:
+        path.write_text(text, encoding="utf-8")
+    except OSError as exc:
+        raise RuntimeError(f"export 쓰기 실패: {path} ({exc})") from exc
     return True
 
 
@@ -121,6 +170,19 @@ def build(out_dir: Path) -> dict:
     now = dt.datetime.now(dt.timezone.utc)
     manifest = {"generatedAt": now.isoformat(timespec="seconds"), "tabs": {}, "archiveDates": []}
 
+    # 0) 활성/아카이브 self-healing — 소스별 가치 판정(위 _KEEP_PREDICATE)에 따라
+    #    매 export 때 양방향 정렬. 정크(별수 0 ClawHub 전용 등)는 대상에서 자동 제외되고,
+    #    나중에 별수가 붙으면 자동 복귀한다.
+    conn.execute(
+        f"UPDATE entries SET entry_status='active'"
+        f" WHERE entry_status='archived' AND ({_KEEP_PREDICATE})"
+    )
+    conn.execute(
+        f"UPDATE entries SET entry_status='archived'"
+        f" WHERE entry_status='active' AND NOT ({_KEEP_PREDICATE})"
+    )
+    conn.commit()
+
     # 1) 랭킹 탭 × 5 (전체 목록, 정렬 완료 — 클라이언트는 페이징만)
     for tab, where in TABS.items():
         rows = _rows(
@@ -143,7 +205,7 @@ def build(out_dir: Path) -> dict:
     idx = _rows(
         conn,
         """
-        SELECT slug, canonical_name AS name, summary_short_ko AS sh, summary_ko,
+        SELECT slug, LEFT(canonical_name, 100) AS name, summary_short_ko AS sh, summary_ko,
                tags, category, kind, stars
         FROM entries WHERE entry_status='active'
         """,
@@ -183,7 +245,7 @@ def build(out_dir: Path) -> dict:
 
     # 4) 상세 전문 — 정적 내용만 (별수·히스토리는 metrics/history 합본으로).
     #    pushedAt 제외: 마지막 push 시각은 수집마다 바뀌어 정적 파일을 건드리는 주범.
-    entries = _rows(conn, "SELECT id, slug, kind, canonical_name, summary_short_ko, summary_ko,"
+    entries = _rows(conn, "SELECT id, slug, kind, LEFT(canonical_name, 100) AS canonical_name, summary_short_ko, summary_ko,"
                           " usage_ko, install_commands, tags, category, repo_url, homepage_url,"
                           " license, github_created_at"
                           " FROM entries WHERE entry_status='active'")
@@ -194,6 +256,7 @@ def build(out_dir: Path) -> dict:
             {"source": a["source"], "external_id": a["external_id"],
              "url": a["url"], "metrics": a["metrics"]}
         )
+    written: set[str] = set()
     for e in entries:
         detail = {
             "slug": e["slug"],
@@ -211,10 +274,22 @@ def build(out_dir: Path) -> dict:
             "createdAt": e["github_created_at"].date().isoformat() if e["github_created_at"] else None,
             "appearances": apps.get(e["id"], []),
         }
+        fname = _entry_filename(e["slug"])
+        written.add(fname)
         _write_if_changed(
-            out / "entry" / f"{e['slug']}.json",
+            out / "entry" / fname,
             json.dumps(detail, ensure_ascii=False, separators=(",", ":")),
         )
+
+    # 프루닝 — 이번 export 대상이 아닌 entry 파일 삭제 (정크·아카이브 잔재)
+    entry_root = out / "entry"
+    for f in entry_root.rglob("*.json"):
+        if f.relative_to(entry_root).as_posix() not in written:
+            f.unlink()
+    for d in sorted((p for p in entry_root.rglob("*") if p.is_dir()),
+                    key=lambda p: len(p.parts), reverse=True):
+        if not any(d.iterdir()):
+            d.rmdir()
 
     # 5) 스타 일별 추이 합본 (60일, 차트용) — 쿼리 1번으로 일괄 조회
     hist_rows = conn.execute(
