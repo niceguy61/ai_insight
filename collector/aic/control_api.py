@@ -8,7 +8,13 @@ from httpx import Client
 
 from aic.config import load_config
 from aic.enrich.llm_client import get_settings, list_models  # noqa: F401
-from aic.jobs import VALID_SOURCES, delete_expired_raw_items, end_enrich, run_job  # noqa: F401
+from aic.jobs import (  # noqa: F401
+    VALID_SOURCES,
+    delete_expired_raw_items,
+    end_enrich,
+    run_job,
+    try_begin_enrich,
+)
 
 __all__ = ["create_app", "run_job", "delete_expired_raw_items"]
 
