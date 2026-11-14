@@ -108,8 +108,8 @@ def _entry_filename(slug: str) -> str:
     return f"{repo}.json"
 
 
-def _rows(conn, sql) -> list[dict]:
-    cur = conn.execute(sql)
+def _rows(conn, sql, params=None) -> list[dict]:
+    cur = conn.execute(sql, params or ())
     cols = [d[0] for d in cur.description]
     return [dict(zip(cols, r)) for r in cur.fetchall()]
 
@@ -168,7 +168,8 @@ def build(out_dir: Path) -> dict:
     (out / "archive").mkdir(parents=True, exist_ok=True)
 
     now = dt.datetime.now(dt.timezone.utc)
-    manifest = {"generatedAt": now.isoformat(timespec="seconds"), "tabs": {}, "archiveDates": []}
+    manifest = {"generatedAt": now.isoformat(timespec="seconds"), "tabs": {}, "kinds": {},
+                "archiveDates": []}
 
     # 0) 활성/아카이브 self-healing — 소스별 가치 판정(위 _KEEP_PREDICATE)에 따라
     #    매 export 때 양방향 정렬. 정크(별수 0 ClawHub 전용 등)는 대상에서 자동 제외되고,
@@ -184,12 +185,14 @@ def build(out_dir: Path) -> dict:
     conn.commit()
 
     # 1) 랭킹 탭 × 5 (전체 목록, 정렬 완료 — 클라이언트는 페이징만)
+    tab_top_rows: dict[str, list[dict]] = {}
     for tab, where in TABS.items():
         rows = _rows(
             conn,
             f"SELECT {SLIM_COLS} FROM entries WHERE entry_status='active' AND {where}"
             f" ORDER BY {ORDER[tab]} LIMIT {LIMITS[tab]}",
         )
+        tab_top_rows[tab] = rows
         ids = [r["id"] for r in rows]
         sparks, momenta = _spark_batch(conn, ids)
         slim_rows = [
@@ -200,6 +203,38 @@ def build(out_dir: Path) -> dict:
             json.dumps(slim_rows, ensure_ascii=False, separators=(",", ":")),
         )
         manifest["tabs"][tab] = len(slim_rows)
+
+    # 1b) 종류별 슬라이스 — 상위 컷(LIMITS)이 한 종류로 채워지면 다른 종류가 잘려
+    #     칩을 골라도 못 보는 문제(설치수 탭: 스킬 3.5만 vs 플러그인 146)를 보완.
+    #     컷에서 잘린 종류에 한해 rank/{tab}-{kind}.json을 쓰고, 클라이언트는
+    #     칩 선택 시 manifest.kinds에 있는 파일을 읽는다.
+    from collections import Counter
+
+    for tab, where in TABS.items():
+        in_top = Counter(r["kind"] for r in tab_top_rows[tab])
+        for kind in ("mcp", "skill", "plugin", "library"):
+            eligible = conn.execute(
+                f"SELECT count(*) FROM entries WHERE entry_status='active' AND {where} AND kind = %s",
+                (kind,),
+            ).fetchone()[0]
+            if eligible <= in_top[kind]:
+                continue  # 탭 목록 안에 다 들어옴 — 클라이언트 로컬 필터로 충분
+            srows = _rows(
+                conn,
+                f"SELECT {SLIM_COLS} FROM entries WHERE entry_status='active' AND {where}"
+                f" AND kind = %s ORDER BY {ORDER[tab]} LIMIT {LIMITS[tab]}",
+                (kind,),
+            )
+            ids = [r["id"] for r in srows]
+            sparks, momenta = _spark_batch(conn, ids)
+            slim_rows = [
+                slim(r, sparks.get(r["id"], []), momenta.get(r["id"], 0)) for r in srows
+            ]
+            _write_if_changed(
+                out / "rank" / f"{tab}-{kind}.json",
+                json.dumps(slim_rows, ensure_ascii=False, separators=(",", ":")),
+            )
+            manifest["kinds"][f"{tab}-{kind}"] = len(slim_rows)
 
     # 2) 검색 인덱스
     idx = _rows(
