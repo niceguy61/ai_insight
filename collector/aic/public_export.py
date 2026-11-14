@@ -63,7 +63,7 @@ SLIM_COLS = (
 )
 
 # 사이트에 보일 가치가 있는 엔트리 판정 — 소스별 기준:
-#   github: 별수 > 0 / 요약 존재 / skills.sh·npm: installs 100+ / ClawHub 전용: installs 3000+
+#   github: 별수 > 0 / 요약 존재 / skills.sh·npm: installs 100+ / ClawHub 전용: installs 1000+
 #   (ClawHub 카운트는 인플레이션 — 디렉터리 전체 수집 방지용 상위 컷)
 _KEEP_PREDICATE = """
     COALESCE(stars, 0) > 0
@@ -71,7 +71,7 @@ _KEEP_PREDICATE = """
     OR (COALESCE(installs, 0) >= 100 AND EXISTS (
         SELECT 1 FROM appearances a WHERE a.entry_id = entries.id
           AND a.source IN ('skills_sh', 'npm')))
-    OR (COALESCE(installs, 0) >= 3000 AND EXISTS (
+    OR (COALESCE(installs, 0) >= 1000 AND EXISTS (
         SELECT 1 FROM appearances a WHERE a.entry_id = entries.id
           AND a.source = 'clawhub'))
 """
