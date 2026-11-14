@@ -31,3 +31,7 @@ pages/
 logs/
 web/dev-server.log
 web/.next/
+
+# 스크린샷 검증 산출물 / 디자인 체크 브라우저 프로필
+shots-ui/
+.taste-skill/

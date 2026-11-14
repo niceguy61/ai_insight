@@ -72,11 +72,24 @@ def test_clawhub_follows_cursor_two_pages():
         ],
         "nextCursor": None,
     }
+    plugin_page = {
+        "items": [
+            {"ownerHandle": "openclaw", "name": "@openclaw/whatsapp",
+             "displayName": "WhatsApp", "summary": "WhatsApp channel plugin",
+             "runtimeId": "whatsapp", "stats": {"downloads": 208924, "installs": 1171}},
+            {"ownerHandle": "sider", "name": "chrome-openclaw-sider",
+             "displayName": "Sider", "summary": "browser plugin",
+             "runtimeId": "chrome-openclaw-sider", "stats": {"downloads": 20730}},
+        ],
+        "nextCursor": None,
+    }
 
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.host == "clawhub.example"
-        assert request.url.path == "/api/v1/skills"
         assert request.url.params["sort"] == "downloads"
+        if request.url.path == "/api/v1/plugins":
+            return httpx.Response(200, json=plugin_page)
+        assert request.url.path == "/api/v1/skills"
         if "cursor" not in request.url.params:
             return httpx.Response(200, json=page1)
         assert request.url.params["cursor"] == "abc"
@@ -86,6 +99,40 @@ def test_clawhub_follows_cursor_two_pages():
                         base_url="https://clawhub.example")
     items = src.fetch()
     ids = [i.external_id for i in items]
-    assert ids == ["steipete/gifgrep", "openclaw/duckduckgo-plugin", "openclaw/lobster"]
+    assert ids == [
+        "steipete/gifgrep", "openclaw/duckduckgo-plugin", "openclaw/lobster",
+        "openclaw/whatsapp", "sider/chrome-openclaw-sider",
+    ]
     assert items[0].payload["installs"] == 12000
     assert items[2].payload["installs"] is None  # stats 비어 있으면 None
+    # 플러그인 표식과 설치수(다운로드·설치 중 큰 값)
+    assert items[3].payload["plugin"] is True
+    assert items[3].payload["installs"] == 208924
+    assert items[4].payload["plugin"] is True
+    assert items[4].payload["installs"] == 20730
+
+
+def test_clawhub_plugin_slug_strips_scope_and_merges_duplicates():
+    plugin_page = {
+        "items": [
+            {"ownerHandle": "openclaw", "name": "@openclaw/WhatsApp",
+             "displayName": "WhatsApp", "runtimeId": "whatsapp",
+             "stats": {"downloads": 100}},
+            {"ownerHandle": "openclaw", "name": "@openclaw/whatsapp",
+             "displayName": "WhatsApp dup", "runtimeId": "whatsapp",
+             "stats": {"downloads": 100}},
+        ],
+        "nextCursor": None,
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        # fetch()는 스킬과 플러그인을 모두 긁는다 — 스킬은 빈 목록으로 응답
+        if request.url.path == "/api/v1/skills":
+            return httpx.Response(200, json={"items": [], "nextCursor": None})
+        assert request.url.path == "/api/v1/plugins"
+        return httpx.Response(200, json=plugin_page)
+
+    src = ClawhubSource(httpx.Client(transport=httpx.MockTransport(handler)),
+                        base_url="https://clawhub.example")
+    items = src.fetch()
+    assert [i.external_id for i in items] == ["openclaw/whatsapp"]

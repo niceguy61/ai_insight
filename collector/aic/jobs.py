@@ -110,13 +110,15 @@ def _run_clawhub(conn) -> dict:
     src = ClawhubSource(httpx.Client(timeout=HTTP_TIMEOUT))
     items = src.fetch()
     for item in items:
+        kind = "plugin" if item.payload.get("plugin") else "skill"
         upsert_entry(
-            conn, item, "skill",
+            conn, item, kind,
             canonical_name=item.payload.get("displayName") or item.external_id,
             installs=item.payload.get("installs"),
         )
         insert_raw_item(conn, item)
-    return {"items": len(items)}
+    skills = sum(1 for i in items if not i.payload.get("plugin"))
+    return {"items": len(items), "skills": skills, "plugins": len(items) - skills}
 
 
 def _run_mcp_registry(conn) -> dict:
