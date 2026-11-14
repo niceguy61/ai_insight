@@ -2,10 +2,12 @@
 import json
 import logging
 import threading
+import time
 from datetime import datetime, timezone
 from uuid import uuid4
 
 import httpx
+from psycopg import errors as psycopg_errors
 
 from aic.config import load_config
 
@@ -14,6 +16,16 @@ log = logging.getLogger(__name__)
 # enrich 상시 워커와 관리자 수동 실행이 겹치지 않게 하는 프로세스 내 락.
 # 좀비 crawl_runs 행(프로세스 강제 종료 잔재)에 흔들리지 않는다.
 _ENRICH_LOCK = threading.Lock()
+
+# 소스 수집 job 직렬화 — 수집기 (재)시작 시 스케줄 job이 전부 동시 발화하면
+# 두 job이 같은 entries 행을 다른 순서로 UPDATE해 PostgreSQL 교착이 난다
+# (2026-11-14: clawhub×mcp_registry 동시 실행으로 DeadlockDetected).
+# 한 번에 하나의 소스 job만 DB에 쓴다. enrich는 제외 — 자체 락 + 항목 단위
+# 커밋이라 트랜잭션이 짧고, 막으면 상시 요약이 수 분씩 멈춘다.
+_JOB_SERIAL = threading.Lock()
+
+# 교착 재시도 전 대기(초). upsert는 멱등이라 재시도가 안전하다.
+_RETRY_DELAYS = (2, 5)
 
 
 def try_begin_enrich() -> bool:
@@ -46,6 +58,15 @@ VALID_SOURCES = {
 }
 
 
+BATCH_SIZE = 200  # 대량 수집 job의 중간 커밋 주기 — 트랜잭션·행 잠금 유지 시간을 줄인다
+
+
+def _batch_commit(n: int, conn) -> None:
+    """n번째 항목 처리 후 BATCH_SIZE 주기로 중간 커밋. upsert 멱등이라 부분 커밋이 안전하다."""
+    if n % BATCH_SIZE == 0:
+        conn.commit()
+
+
 def _github(conn) -> GithubSource:
     cfg = load_config()
     client = httpx.Client(timeout=HTTP_TIMEOUT)
@@ -71,7 +92,7 @@ def _run_github(conn) -> dict:
     src = _github(conn)
     items = src.fetch()
     snapshot_rows = []
-    for item in items:
+    for n, item in enumerate(items, 1):
         p = item.payload
         entry_id = upsert_entry(
             conn, item, _github_kind(p),
@@ -88,6 +109,7 @@ def _run_github(conn) -> dict:
         stars_now = p.get("stargazers_count")
         if stars_now:  # 0별 스냅샷은 기록하지 않는다 — 테이블 증량 방지
             snapshot_rows.append((entry_id, "github", {"stars": stars_now}))
+        _batch_commit(n, conn)
     capture_snapshots(conn, snapshot_rows)
     return {"items": len(items), "snapshots": len(snapshot_rows)}
 
@@ -109,7 +131,7 @@ def _run_skills_sh(conn) -> dict:
 def _run_clawhub(conn) -> dict:
     src = ClawhubSource(httpx.Client(timeout=HTTP_TIMEOUT))
     items = src.fetch()
-    for item in items:
+    for n, item in enumerate(items, 1):
         kind = "plugin" if item.payload.get("plugin") else "skill"
         upsert_entry(
             conn, item, kind,
@@ -117,6 +139,7 @@ def _run_clawhub(conn) -> dict:
             installs=item.payload.get("installs"),
         )
         insert_raw_item(conn, item)
+        _batch_commit(n, conn)
     skills = sum(1 for i in items if not i.payload.get("plugin"))
     return {"items": len(items), "skills": skills, "plugins": len(items) - skills}
 
@@ -124,20 +147,21 @@ def _run_clawhub(conn) -> dict:
 def _run_mcp_registry(conn) -> dict:
     src = McpRegistrySource(httpx.Client(timeout=HTTP_TIMEOUT))
     items = src.fetch()
-    for item in items:
+    for n, item in enumerate(items, 1):
         upsert_entry(
             conn, item, "mcp",
             repo_url=item.payload.get("repo_url"),
             canonical_name=item.payload.get("title") or item.external_id,
         )
         insert_raw_item(conn, item)
+        _batch_commit(n, conn)
     return {"items": len(items)}
 
 
 def _run_npm(conn) -> dict:
     src = NpmSource(httpx.Client(timeout=HTTP_TIMEOUT))
     items = src.fetch()
-    for item in items:
+    for n, item in enumerate(items, 1):
         package = item.payload.get("package", {})
         monthly = (item.payload.get("downloads") or {}).get("monthly")
         entry_id = upsert_entry(
@@ -150,6 +174,7 @@ def _run_npm(conn) -> dict:
             attach_appearance(conn, entry_id, "npm", item.external_id,
                               url=package.get("links", {}).get("npm"))
         insert_raw_item(conn, item)
+        _batch_commit(n, conn)
     return {"items": len(items)}
 
 
@@ -329,6 +354,27 @@ def _parse_dt(value: str | None):
         return None
 
 
+def _run_source_job(conn, source: str) -> dict:
+    """소스 job 1회 실행 — 직렬화 + 교착(DeadlockDetected) 시 유한 재시도.
+
+    upsert는 멱등이므로 재시도가 안전하다. 제어 API 백그라운드 스레드와
+    스케줄러 양쪽이 모두 이 함수로 진입한다.
+    """
+    with _JOB_SERIAL:
+        for attempt in range(len(_RETRY_DELAYS) + 1):
+            try:
+                return _JOBS[source](conn)
+            except psycopg_errors.DeadlockDetected:
+                conn.rollback()  # aborted 트랜잭션 정리 — 재시도 전 필수
+                if attempt == len(_RETRY_DELAYS):
+                    log.exception("job %s 교착 — 재시도 소진", source)
+                    raise
+                delay = _RETRY_DELAYS[attempt]
+                log.warning("job %s 교착(시도 %s) — %ss 후 재시도", source, attempt + 1, delay)
+                time.sleep(delay)
+    raise AssertionError("unreachable")
+
+
 def run_job(conn, source: str) -> dict:
     """crawl_runs 기록까지 포함한 job 실행. 실패 시 error 기록 후 재raise."""
     if source not in VALID_SOURCES:
@@ -341,7 +387,10 @@ def run_job(conn, source: str) -> dict:
     )
     conn.commit()  # 즉시 확정 — 실행 중 run이 다른 세션에 보이고, HTTP 구간 동안 트랜잭션을 열어두지 않는다
     try:
-        stats = _JOBS[source](conn)
+        if source == "enrich":
+            stats = _JOBS[source](conn)
+        else:
+            stats = _run_source_job(conn, source)
         conn.execute(
             "UPDATE crawl_runs SET status='ok', finished_at=now(), stats=%s WHERE id=%s",
             (json.dumps(stats, ensure_ascii=False), run_id),
